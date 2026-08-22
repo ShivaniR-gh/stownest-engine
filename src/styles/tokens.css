@@ -1,0 +1,110 @@
+/* ==========================================================================
+   StowNest design tokens
+   Colour carries meaning. Amber is reserved for states that need a human.
+   ========================================================================== */
+:root {
+  /* Surfaces — cool paper, not white-on-white */
+  --canvas:        #f4f5f7;
+  --surface:       #ffffff;
+  --surface-sunk:  #fafbfc;
+  --surface-raised:#ffffff;
+  --overlay:       rgba(20, 22, 26, 0.32);
+
+  /* Ink */
+  --ink-900: #14161a;
+  --ink-700: #383d46;
+  --ink-600: #565c66;
+  --ink-400: #868d99;
+  --ink-300: #a8aeb8;
+
+  /* Structure — hairlines, never boxes */
+  --line:        #e2e5ea;
+  --line-strong: #cfd4dc;
+  --line-faint:  #eef0f3;
+
+  /* Accent — navigation, primary action, focus. Deep and desaturated. */
+  --accent:       #1f3d7a;
+  --accent-hover: #18305f;
+  --accent-soft:  #eaeff8;
+  --accent-line:  #c3d0e8;
+
+  /* Semantic */
+  --pos:      #146b4c;
+  --pos-soft: #e6f2ed;
+  --neg:      #9e2a2b;
+  --neg-soft: #fbeaea;
+  --signal:      #b26a00;   /* attention only: delayed, overdue, stale */
+  --signal-soft: #fdf1e0;
+  --idle:      #565c66;
+  --idle-soft: #eef0f3;
+
+  /* Categorical series — harmonised, muted, deliberately not a rainbow */
+  --c1: #1f3d7a; --c2: #2e7d6b; --c3: #b26a00; --c4: #8c3f52;
+  --c5: #4c6182; --c6: #5d5a7d; --c7: #3a7ca5; --c8: #7a6a55;
+  --grid: #edeff2;
+
+  /* Type */
+  --font-ui: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-num: ui-monospace, 'SF Mono', 'JetBrains Mono', 'Roboto Mono', 'Menlo', monospace;
+
+  --fs-eyebrow: 10.5px;
+  --fs-micro: 11px;
+  --fs-xs: 12px;
+  --fs-sm: 13px;
+  --fs-base: 14px;
+  --fs-lg: 16px;
+  --fs-xl: 20px;
+  --fs-2xl: 26px;
+  --fs-3xl: 34px;
+
+  /* Space — 4px base */
+  --s1: 4px;  --s2: 8px;  --s3: 12px; --s4: 16px;
+  --s5: 20px; --s6: 24px; --s7: 32px; --s8: 40px; --s9: 56px;
+
+  --r-sm: 4px; --r-md: 6px; --r-lg: 8px;
+
+  /* One shadow, used only for things that float */
+  --pop: 0 1px 2px rgba(20,22,26,.06), 0 8px 24px rgba(20,22,26,.10);
+
+  --rail-w: 236px;
+  --rail-w-collapsed: 56px;
+  --topbar-h: 52px;
+  --controlbar-h: 49px;
+
+  --t-fast: 110ms cubic-bezier(.4,0,.2,1);
+  --t-med: 200ms cubic-bezier(.4,0,.2,1);
+}
+
+[data-theme='dark'] {
+  --canvas:        #0f1114;
+  --surface:       #16191d;
+  --surface-sunk:  #121519;
+  --surface-raised:#1b1f24;
+  --overlay:       rgba(0,0,0,.6);
+
+  --ink-900: #e9ecf0;
+  --ink-700: #c3c8d0;
+  --ink-600: #9aa1ab;
+  --ink-400: #737a85;
+  --ink-300: #5b626c;
+
+  --line:        #262b31;
+  --line-strong: #343a42;
+  --line-faint:  #1e2228;
+
+  --accent:       #6f97e0;
+  --accent-hover: #85a8e8;
+  --accent-soft:  #1a2331;
+  --accent-line:  #2c3a52;
+
+  --pos: #4fb389; --pos-soft: #16251f;
+  --neg: #e0787a; --neg-soft: #2a1a1b;
+  --signal: #d9973e; --signal-soft: #2a2015;
+  --idle: #9aa1ab; --idle-soft: #1e2228;
+
+  --c1: #6f97e0; --c2: #4fb08f; --c3: #d9973e; --c4: #c8757f;
+  --c5: #8496b5; --c6: #928fb3; --c7: #66a8cc; --c8: #ab9a80;
+  --grid: #23282e;
+
+  --pop: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.5);
+}

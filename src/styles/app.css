@@ -1,0 +1,115 @@
+/* ---------- Shell ---------- */
+.shell { display: grid; grid-template-columns: var(--rail-w) 1fr; min-height: 100vh; }
+.shell[data-collapsed='true'] { grid-template-columns: var(--rail-w-collapsed) 1fr; }
+.shell[data-chrome='off'] { grid-template-columns: 1fr; }
+
+.rail {
+  position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column;
+  background: var(--surface); border-right: 1px solid var(--line); overflow: hidden;
+}
+.rail__brand {
+  display: flex; align-items: center; gap: var(--s3);
+  height: var(--topbar-h); padding: 0 var(--s4); border-bottom: 1px solid var(--line-faint);
+  flex-shrink: 0;
+}
+.rail__mark {
+  width: 22px; height: 22px; border-radius: var(--r-sm); flex-shrink: 0;
+  background: var(--accent); color: #fff; display: grid; place-items: center;
+  font-size: 11px; font-weight: 700; letter-spacing: -.02em;
+}
+.rail__word { font-size: var(--fs-sm); font-weight: 650; letter-spacing: .04em; white-space: nowrap; }
+.rail__nav { flex: 1; overflow-y: auto; padding: var(--s3) var(--s2) var(--s5); }
+.rail__group { margin-top: var(--s4); }
+.rail__group:first-child { margin-top: 0; }
+.rail__grouphd { padding: var(--s2) var(--s3) var(--s1); }
+.rail__item {
+  display: flex; align-items: center; gap: var(--s3); width: 100%;
+  padding: 6px var(--s3); border-radius: var(--r-md); color: var(--ink-600);
+  font-size: var(--fs-sm); font-weight: 500; position: relative;
+  transition: background var(--t-fast), color var(--t-fast);
+}
+.rail__item:hover { background: var(--surface-sunk); color: var(--ink-900); }
+.rail__item[aria-current='page'] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.rail__item[aria-current='page']::before {
+  content: ''; position: absolute; left: -8px; top: 50%; transform: translateY(-50%);
+  width: 2px; height: 16px; background: var(--accent); border-radius: 0 2px 2px 0;
+}
+.rail__icon { width: 16px; flex-shrink: 0; display: grid; place-items: center; opacity: .85; }
+.rail__label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rail__count { margin-left: auto; font-size: var(--fs-micro); color: var(--ink-400); }
+.rail__foot { border-top: 1px solid var(--line-faint); padding: var(--s2); flex-shrink: 0; }
+.shell[data-collapsed='true'] .rail__label,
+.shell[data-collapsed='true'] .rail__word,
+.shell[data-collapsed='true'] .rail__grouphd,
+.shell[data-collapsed='true'] .rail__count { display: none; }
+.shell[data-collapsed='true'] .rail__item { justify-content: center; padding: 8px 0; }
+.shell[data-collapsed='true'] .rail__group { border-top: 1px solid var(--line-faint); padding-top: var(--s2); }
+
+.main { min-width: 0; display: flex; flex-direction: column; }
+
+.topbar {
+  position: sticky; top: 0; z-index: 30; height: var(--topbar-h); flex-shrink: 0;
+  display: flex; align-items: center; gap: var(--s4);
+  padding: 0 var(--s6); background: var(--surface); border-bottom: 1px solid var(--line);
+}
+.topbar__title { font-size: var(--fs-base); font-weight: 620; letter-spacing: -.01em; }
+.topbar__crumb { color: var(--ink-400); font-size: var(--fs-sm); }
+.topbar__right { margin-left: auto; display: flex; align-items: center; gap: var(--s2); }
+
+.page { padding: var(--s6); flex: 1; min-width: 0; }
+.page--flush { padding: 0; }
+
+/* ---------- Section rhythm ---------- */
+.section { margin-bottom: var(--s7); }
+.section__hd {
+  display: flex; align-items: baseline; gap: var(--s3);
+  margin-bottom: var(--s3); padding-bottom: var(--s2);
+  border-bottom: 1px solid var(--line);
+}
+.section__title { font-size: var(--fs-sm); font-weight: 620; letter-spacing: -.005em; }
+.section__note { font-size: var(--fs-xs); color: var(--ink-400); margin-left: auto; }
+
+.grid { display: grid; gap: var(--s4); }
+.grid--kpi { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
+.grid--2 { grid-template-columns: repeat(2, minmax(0,1fr)); }
+.grid--3 { grid-template-columns: repeat(3, minmax(0,1fr)); }
+.grid--split { grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); }
+@media (max-width: 1100px) { .grid--split, .grid--2, .grid--3 { grid-template-columns: 1fr; } }
+
+/* ---------- Card ---------- */
+.card {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--r-lg); min-width: 0;
+}
+.card__hd {
+  display: flex; align-items: center; gap: var(--s3);
+  padding: var(--s3) var(--s4); border-bottom: 1px solid var(--line-faint);
+}
+.card__title { font-size: var(--fs-sm); font-weight: 600; }
+.card__sub { font-size: var(--fs-xs); color: var(--ink-400); }
+.card__tools { margin-left: auto; display: flex; align-items: center; gap: var(--s1); }
+.card__bd { padding: var(--s4); }
+.card__bd--flush { padding: 0; }
+
+/* ---------- Presentation mode ----------
+   The same product at reading distance: type scales up, chrome drops away.
+   Nothing here is a second design language. */
+.present { min-height: 100vh; background: var(--canvas); display: flex; flex-direction: column; }
+.present__bar {
+  display: flex; align-items: center; gap: var(--s3);
+  padding: var(--s4) var(--s8); border-bottom: 1px solid var(--line); background: var(--surface);
+}
+.present__mark { display: flex; align-items: center; gap: var(--s3); }
+.present__body { flex: 1; padding: var(--s8) var(--s9); max-width: 1500px; width: 100%; margin: 0 auto; }
+.present__eyebrow { font-size: var(--fs-xs); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-400); font-weight: 600; }
+.present__h { font-size: 30px; font-weight: 600; letter-spacing: -.02em; margin: var(--s2) 0 var(--s6); }
+.present__nav { margin-left: auto; display: flex; align-items: center; gap: var(--s3); }
+.present__dots { display: flex; gap: 6px; }
+.present__dot { width: 7px; height: 7px; border-radius: 50%; background: var(--line-strong); transition: background var(--t-fast); }
+.present__dot[data-on='true'] { background: var(--accent); }
+.present .metric { padding: var(--s5) var(--s6); min-height: 140px; }
+.present .metric__value { font-size: 40px; }
+.present .metric__label { font-size: var(--fs-xs); }
+.present .card__title { font-size: var(--fs-base); }
+.present .card__sub { font-size: var(--fs-sm); }
+.present .grid { gap: var(--s5); }

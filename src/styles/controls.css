@@ -1,0 +1,19 @@
+.ctlbar {
+  position: sticky; top: var(--topbar-h); z-index: 25;
+  display: flex; align-items: center; gap: var(--s2);
+  height: var(--controlbar-h); padding: 0 var(--s6); flex-wrap: nowrap;
+  background: var(--surface); border-bottom: 1px solid var(--line); overflow-x: auto;
+}
+.ctlbar__sep { width: 1px; height: 18px; background: var(--line); flex-shrink: 0; }
+.ctlbar__right { margin-left: auto; display: flex; align-items: center; gap: var(--s2); flex-shrink: 0; }
+.ctlbar__sync { display: flex; align-items: center; gap: 6px; font-size: var(--fs-micro); color: var(--ink-400); white-space: nowrap; }
+.ctlbar__sync[data-stale='true'] { color: var(--signal); font-weight: 550; }
+.ctlbar__dot { width: 5px; height: 5px; border-radius: 50%; background: var(--pos); flex-shrink: 0; }
+.ctlbar__sync[data-stale='true'] .ctlbar__dot { background: var(--signal); }
+
+.rangepop { width: 300px; }
+.rangepop__grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; }
+.rangepop__custom { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s2); padding: var(--s2); border-top: 1px solid var(--line-faint); margin-top: var(--s1); }
+
+.spin { animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg) } }

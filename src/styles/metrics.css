@@ -1,0 +1,79 @@
+/* ==========================================================================
+   Metric card. The `ƒ` affordance flips the card to expose the exact formula
+   and source columns. A metric that cannot be computed says so, and names
+   the column it is missing. It never guesses.
+   ========================================================================== */
+.metric {
+  position: relative; background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--r-lg); padding: var(--s3) var(--s4) var(--s4);
+  min-height: 104px; display: flex; flex-direction: column;
+  transition: border-color var(--t-fast);
+}
+.metric:hover { border-color: var(--line-strong); }
+.metric--clickable { cursor: pointer; }
+.metric--clickable:hover { border-color: var(--accent-line); background: var(--surface-sunk); }
+
+.metric__hd { display: flex; align-items: center; gap: 6px; margin-bottom: var(--s3); min-height: 16px; }
+.metric__label {
+  font-size: var(--fs-micro); font-weight: 600; letter-spacing: .05em;
+  text-transform: uppercase; color: var(--ink-400);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.metric__fx {
+  margin-left: auto; width: 18px; height: 18px; flex-shrink: 0;
+  display: grid; place-items: center; border-radius: var(--r-sm);
+  font-family: var(--font-num); font-size: 11px; font-style: italic;
+  color: var(--ink-300); opacity: 0; transition: opacity var(--t-fast), background var(--t-fast), color var(--t-fast);
+}
+.metric:hover .metric__fx, .metric__fx:focus-visible { opacity: 1; }
+.metric__fx:hover { background: var(--accent-soft); color: var(--accent); }
+.metric__fx[aria-expanded='true'] { opacity: 1; background: var(--accent-soft); color: var(--accent); }
+
+.metric__value {
+  font-family: var(--font-num); font-variant-numeric: tabular-nums;
+  font-size: var(--fs-2xl); font-weight: 500; letter-spacing: -.03em;
+  line-height: 1.05; color: var(--ink-900);
+}
+.metric__value--void { color: var(--ink-300); font-size: var(--fs-lg); font-weight: 400; letter-spacing: 0; }
+.metric__unit { font-size: var(--fs-base); color: var(--ink-400); margin-left: 2px; }
+.metric__ft { margin-top: auto; padding-top: var(--s3); display: flex; align-items: center; gap: var(--s2); flex-wrap: wrap; }
+.metric__cmp { font-size: var(--fs-micro); color: var(--ink-400); white-space: nowrap; }
+
+.delta { display: inline-flex; align-items: center; gap: 3px; font-family: var(--font-num);
+  font-size: var(--fs-xs); font-weight: 600; font-variant-numeric: tabular-nums; }
+.delta--pos { color: var(--pos); }
+.delta--neg { color: var(--neg); }
+.delta--flat { color: var(--ink-400); }
+
+/* Unavailable state — the honest one */
+.metric__void { display: flex; flex-direction: column; gap: 5px; }
+.metric__voidnote {
+  font-size: var(--fs-micro); color: var(--ink-400); line-height: 1.4;
+}
+.metric__voidnote code {
+  font-family: var(--font-num); font-size: 10.5px; color: var(--signal);
+  background: var(--signal-soft); padding: 1px 4px; border-radius: 3px;
+}
+
+/* Provenance panel — slides over the card face */
+.prov {
+  position: absolute; inset: 0; z-index: 5; padding: var(--s3) var(--s4);
+  background: var(--surface-raised); border: 1px solid var(--accent-line);
+  border-radius: var(--r-lg); box-shadow: var(--pop);
+  display: flex; flex-direction: column; gap: 7px; overflow-y: auto;
+  animation: provin var(--t-med) both;
+}
+@keyframes provin { from { opacity: 0; transform: scale(.985) } to { opacity: 1; transform: none } }
+.prov__hd { display: flex; align-items: center; gap: var(--s2); }
+.prov__formula {
+  font-family: var(--font-num); font-size: var(--fs-micro); line-height: 1.55;
+  color: var(--ink-900); background: var(--surface-sunk);
+  border: 1px solid var(--line-faint); border-radius: var(--r-sm); padding: 6px 7px;
+  white-space: pre-wrap; word-break: break-word;
+}
+.prov__row { display: flex; gap: var(--s2); font-size: var(--fs-micro); line-height: 1.5; }
+.prov__k { color: var(--ink-400); flex-shrink: 0; min-width: 46px; }
+.prov__v { color: var(--ink-700); font-family: var(--font-num); font-size: 10.5px; word-break: break-word; }
+
+/* Sparkline strip inside metric */
+.metric__spark { margin-top: var(--s2); height: 26px; }

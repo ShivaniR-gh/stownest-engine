@@ -1,0 +1,35 @@
+{
+  "name": "stownest-platform",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "verify": "esbuild scripts/verify.ts --bundle --platform=node --format=cjs --outfile=node_modules/.cache/verify.cjs --log-level=error && node node_modules/.cache/verify.cjs",
+    "check": "npm run typecheck && npm run verify",
+    "demo:sheet": "esbuild scripts/make-demo-sheet.ts --bundle --platform=node --format=cjs --outfile=node_modules/.cache/mk.cjs --log-level=error && node node_modules/.cache/mk.cjs && python3 scripts/build_demo_xlsx.py",
+    "dev:api": "esbuild scripts/dev-api.ts --bundle --platform=node --format=cjs --outfile=node_modules/.cache/dev-api.cjs --log-level=error --external:google-auth-library && node node_modules/.cache/dev-api.cjs",
+    "verify:config": "esbuild scripts/verify-config.ts --bundle --platform=node --format=cjs --outfile=node_modules/.cache/vc.cjs --log-level=error && node node_modules/.cache/vc.cjs",
+    "e2e": "esbuild scripts/e2e.ts --bundle --platform=node --format=cjs --outfile=node_modules/.cache/e2e.cjs --log-level=error --external:google-auth-library && node node_modules/.cache/e2e.cjs",
+    "verify:departments": "esbuild scripts/verify-departments.ts --bundle --platform=node --format=cjs --outfile=node_modules/.cache/vd.cjs --log-level=error --external:google-auth-library && node node_modules/.cache/vd.cjs"
+  },
+  "dependencies": {
+    "google-auth-library": "^9.14.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.26.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@types/react": "^18.3.11",
+    "@types/react-dom": "^18.3.0",
+    "@vercel/node": "^3.2.24",
+    "@vitejs/plugin-react": "^4.3.2",
+    "esbuild": "^0.21.5",
+    "typescript": "^5.5.4",
+    "vite": "^5.4.8"
+  }
+}
