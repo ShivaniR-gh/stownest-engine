@@ -23,7 +23,7 @@ export interface SourceRow {
 }
 
 export interface PreviewColumn {
-  sheetColumn: string; key: string; header: string; type: string;
+  sheetColumn: string; key: string; header: string; type: string; role?: string;
   editable?: boolean; required?: boolean; filterable?: boolean; groupable?: boolean; hidden?: boolean;
 }
 

@@ -16,6 +16,11 @@ import type { DepartmentId } from '@/config/types';
 
 const TYPES = ['text', 'longtext', 'id', 'number', 'currency', 'percent', 'date', 'enum', 'boolean', 'email', 'phone'];
 
+/** Meaning, not format. Roles are what let the dashboard compute utilisation,
+ *  margin or capacity generically instead of per department. */
+const ROLES = ['', 'identifier', 'name', 'location', 'category', 'status', 'date',
+  'quantity', 'capacity', 'occupied', 'amount', 'cost', 'revenue'];
+
 /**
  * Data source management.
  *
@@ -352,7 +357,8 @@ function ConnectWizard({ department, existing, serviceAccount, onClose, onSaved 
             <table className="tbl">
               <thead>
                 <tr>
-                  <th>Sheet column</th><th>Shows as</th><th style={{ width: 120 }}>Type</th>
+                  <th>Sheet column</th><th>Shows as</th><th style={{ width: 108 }}>Type</th>
+                  <th style={{ width: 128 }}>Means</th>
                   <th style={{ width: 70, textAlign: 'center' }}>Edit</th>
                   <th style={{ width: 70, textAlign: 'center' }}>Filter</th>
                   <th style={{ width: 70, textAlign: 'center' }}>Group</th>
@@ -372,6 +378,12 @@ function ConnectWizard({ department, existing, serviceAccount, onClose, onSaved 
                         {TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                       </select>
                     </td>
+                    <td>
+                      <select className="field" style={{ height: 26 }} value={c.role ?? ''}
+                        onChange={e => setCol(i, { role: e.target.value })}>
+                        {ROLES.map(r => <option key={r} value={r}>{r || '—'}</option>)}
+                      </select>
+                    </td>
                     {(['editable', 'filterable', 'groupable'] as const).map(f => (
                       <td key={f} style={{ textAlign: 'center' }}>
                         <input type="checkbox" checked={Boolean(c[f])} style={{ accentColor: 'var(--accent)' }}
@@ -385,8 +397,10 @@ function ConnectWizard({ department, existing, serviceAccount, onClose, onSaved 
           </div>
 
           <p style={{ marginTop: 'var(--s3)', fontSize: 'var(--fs-xs)', color: 'var(--ink-400)', lineHeight: 1.7 }}>
-            Every column is kept, including ones StowNest has no special meaning for. Types only affect
-            formatting, sorting and which filters are offered — your sheet is not modified.
+            <b>Means</b> is what unlocks real analytics. Mark your capacity column as <code>capacity</code> and
+            your filled column as <code>occupied</code>, and utilisation, available space and near-full
+            warnings are computed automatically — for any department, from any sheet. Leave it blank and the
+            column still appears in tables and forms, it just carries no business meaning.
           </p>
 
           <SectionHeader title="Preview" note="First rows as StowNest reads them" />

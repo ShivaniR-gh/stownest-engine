@@ -1,5 +1,5 @@
 /** Schema derivation must work from mapping alone, with no domain knowledge. */
-import { deriveSchema, deriveKpis, summariseBy } from '../src/lib/analytics/deriveSchema';
+import { deriveSchema, deriveKpis, summariseBy, utilisationBy, insights, band } from '../src/lib/analytics/deriveSchema';
 import type { DatasetDef, Row } from '../src/config/types';
 
 let f = 0;
@@ -69,6 +69,63 @@ const byCity = summariseBy(rows, facility.columns[1], s.measures);
 ck('one group per distinct value', byCity.length === 3, byCity.map(g => g.key));
 ck('counts add back to the total', byCity.reduce((a, g) => a + g.count, 0) === rows.length);
 ck('measures summed per group', byCity[0].measures.total_space === byCity[0].count * 10000, byCity[0].measures);
+
+console.log('\nSemantic roles unlock real metrics — generically');
+{
+  // Same sheet, now with roles declared by the admin in the mapping step.
+  const withRoles = {
+    ...facility,
+    columns: facility.columns.map(c => ({
+      ...c,
+      role: c.key === 'warehouse' ? 'name'
+        : c.key === 'location' ? 'location'
+        : c.key === 'month' ? 'date'
+        : c.key === 'total_space' ? 'capacity'
+        : c.key === 'occupied_space' ? 'occupied'
+        : c.key === 'status' ? 'status' : undefined,
+    })),
+  } as DatasetDef;
+
+  const before = deriveSchema(facility, rows);
+  const after = deriveSchema(withRoles, rows);
+  ck('without roles, utilisation is not computable', !before.hasUtilisation);
+  ck('with roles, it is', after.hasUtilisation);
+
+  const k = deriveKpis(withRoles, rows, [], after);
+  const labels = k.map(x => x.def.label);
+  ck('Utilisation KPI appears', labels.includes('Utilisation'), labels);
+  ck('Available is derived, not read', labels.includes('Available'));
+  const util = k.find(x => x.def.label === 'Utilisation')!;
+  // 60 rows: 54 at 9500/10000, 6 at 3000/10000 -> (54*9500+6*3000)/600000
+  const expected = ((54 * 9500 + 6 * 3000) / (60 * 10000)) * 100;
+  ck('utilisation is arithmetically correct', Math.abs((util.value ?? 0) - expected) < 0.01,
+    { got: util.value, expected });
+  ck('formula names the real sheet columns',
+    util.def.formula.includes('Occupied Space (sqft)') && util.def.formula.includes('Total Space (sqft)'),
+    util.def.formula);
+  const avail = k.find(x => x.def.label === 'Available')!;
+  ck('available = capacity − occupied', avail.value === 60 * 10000 - (54 * 9500 + 6 * 3000), avail.value);
+
+  console.log('\nUtilisation bands drive colour consistently');
+  ck('50% is low', band(50) === 'low');
+  ck('75% is healthy', band(75) === 'healthy');
+  ck('90% is high', band(90) === 'high');
+  ck('100% is full', band(100) === 'full');
+
+  const byLoc = utilisationBy(rows, withRoles.columns[1], after);
+  ck('utilisation computed per location', byLoc.length === 3, byLoc.map(x => [x.key, x.pct.toFixed(1)]));
+  ck('sorted by utilisation descending', byLoc[0].pct >= byLoc[byLoc.length - 1].pct);
+  ck('available per group is capacity − occupied',
+    byLoc.every(g => Math.abs(g.available - (g.capacity - g.occupied)) < 0.01));
+
+  console.log('\nInsights are stated only when supported');
+  ck('no insights without roles', insights(rows, before).length === 0);
+  const ins = insights(rows, after);
+  ck('insights produced with roles', ins.length > 0, ins);
+  ck('insights never invent a percentage above 100',
+    !ins.some(t => /(\d+(\.\d+)?)%/.test(t) && Number(RegExp.$1) > 100), ins);
+  ck('no insights on an empty set', insights([], after).length === 0);
+}
 
 console.log(f === 0 ? '\nAll derivation checks passed.\n' : `\n${f} FAILED\n`);
 process.exit(f ? 1 : 0);

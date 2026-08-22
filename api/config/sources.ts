@@ -152,6 +152,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         datasetId,
         String(c.sheetColumn ?? ''), String(c.key ?? ''), String(c.header ?? ''),
         String(c.type ?? 'text'),
+        String(c.role ?? ''),
         c.editable === false ? 'FALSE' : 'TRUE',
         c.required ? 'TRUE' : 'FALSE',
         c.filterable ? 'TRUE' : 'FALSE',

@@ -1,4 +1,4 @@
-import type { ColumnDef, ColumnType, DatasetDef, DepartmentId } from '../../src/config/types';
+import type { ColumnDef, ColumnType, DatasetDef, DepartmentId, SemanticRole } from '../../src/config/types';
 import { DATASETS as SEED } from '../../src/config/datasets';
 import { readRange } from './sheets';
 import { HttpError, required } from './env';
@@ -27,9 +27,14 @@ export const SOURCES_HEADERS = [
 ] as const;
 
 export const MAPPINGS_HEADERS = [
-  'Dataset ID', 'Sheet Column', 'Key', 'Header', 'Type', 'Editable', 'Required',
+  'Dataset ID', 'Sheet Column', 'Key', 'Header', 'Type', 'Role', 'Editable', 'Required',
   'Filterable', 'Groupable', 'Aggregate', 'Enum Values', 'Hidden',
 ] as const;
+
+export const ROLES: SemanticRole[] = [
+  'identifier', 'name', 'location', 'category', 'status', 'date',
+  'quantity', 'capacity', 'occupied', 'amount', 'cost', 'revenue',
+];
 
 const TTL = 30_000;
 let cache: { at: number; defs: DatasetDef[] } | null = null;
@@ -55,11 +60,13 @@ function toColumn(row: Record<string, string>): ColumnDef | null {
   const key = row.key || row.sheet_column;
   if (!key || !row.sheet_column) return null;
   const type = (VALID_TYPES as string[]).includes(row.type) ? (row.type as ColumnType) : 'text';
+  const role = (ROLES as string[]).includes(row.role) ? (row.role as SemanticRole) : undefined;
   const enumValues = row.enum_values ? row.enum_values.split(',').map(s => s.trim()).filter(Boolean) : undefined;
   return {
     key,
     header: row.header || row.sheet_column,
     type,
+    role,
     sheetColumn: row.sheet_column,
     enumValues: type === 'enum' ? enumValues : undefined,
     editable: truthy(row.editable),

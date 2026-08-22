@@ -7,39 +7,43 @@
    ========================================================================== */
 :root {
   /* Surfaces — warm light canvas, pure white cards */
-  --canvas:         #f3f5f4;
-  --canvas-tint:    #eceeed;
+  --canvas:         #f6f8fc;
+  --canvas-tint:    #eef2f9;
   --surface:        #ffffff;
-  --surface-sunk:   #f6f9f8;
+  --surface-sunk:   #f8fafd;
   --surface-raised: #ffffff;
-  --overlay:        rgba(20, 33, 61, 0.44);
+  --overlay:        rgba(15, 23, 42, .45);
 
   /* Ink */
-  --ink-900: #14213d;
-  --ink-700: #3a4560;
-  --ink-600: #626c85;
-  --ink-400: #8d95a8;
-  --ink-300: #b3b9c6;
+  --ink-900: #0f172a;
+  --ink-700: #334155;
+  --ink-600: #64748b;
+  --ink-400: #94a3b8;
+  --ink-300: #cbd5e1;
 
   /* Structure */
-  --line:        #e3e9e7;
-  --line-strong: #ccd6d3;
-  --line-faint:  #eef3f1;
+  --line:        #e2e8f0;
+  --line-strong: #cbd5e1;
+  --line-faint:  #eef2f7;
 
   /* Structure and navigation — deep navy */
   --navy:          #14213d;
   --navy-strong:   #0d162b;
   --accent-ink:    #ffffff;
 
-  /* Brand accent — StowNest green. Active navigation, primary action, positive
-     movement. Putting the brand on green frees orange, amber and red entirely
-     for data and alerts, so nothing has to serve two meanings at once. */
-  --accent:        #16a34a;
-  --accent-hover:  #15803d;
-  --accent-strong: #106b33;
-  --accent-soft:   #dcfce7;
-  --accent-line:   #8ee0a8;
-  --accent-bright: #4ade80;   /* the lead-card field */
+  /* Primary — blue. Actions, selected navigation, interactive controls.
+     Blue as the brand leaves green free to mean "healthy", orange "attention"
+     and red "critical", so no colour has to carry two meanings. */
+  --accent:        #2563eb;
+  --accent-hover:  #1d4ed8;
+  --accent-strong: #1e40af;
+  --accent-soft:   #e8effe;
+  --accent-line:   #bfd4fb;
+  --accent-bright: #3b82f6;
+
+  /* Navy — structure: sidebar, lead surfaces, headings. */
+  --navy:        #172554;
+  --navy-strong: #0f172a;
 
   /* Kept as an alias so existing rules resolve; mint is now a chart hue only. */
   --mint:        #17a673;
@@ -48,34 +52,33 @@
   --mint-line:   #b7e6d4;
 
   /* Semantic */
-  --pos:      #17a673;
-  --pos-soft: #e4f6ef;
-  --warn:      #d98324;   /* amber — a caution, short of an alert */
-  --warn-soft: #fdf1e0;
-  /* Attention is a DEEP crimson, not a bright red: bright red sits too close to
-     the brand orange to be told apart at a glance, which would make an alert
-     look like branding. Verified by contrast audit, not by eye. */
-  --neg:      #a81f16;
-  --neg-soft: #fbe9e7;
-  --signal:      #a81f16;
-  --signal-soft: #fbe9e7;
-  --info:      #14213d;
-  --info-soft: #e9ebf0;
-  --idle:      #626c85;
-  --idle-soft: #f0eded;
+  --pos:       #10b981;
+  --pos-soft:  #e7f8f1;
+  --warn:      #f59e0b;
+  --warn-soft: #fef4e2;
+  --neg:       #ef4444;
+  --neg-soft:  #feecec;
+  --signal:      #f59e0b;   /* attention — orange, distinct from blue brand */
+  --signal-soft: #fef4e2;
+  --purple:      #8b5cf6;
+  --purple-soft: #f1ecfe;
+  --info:      #2563eb;
+  --info-soft: #e8effe;
+  --idle:      #64748b;
+  --idle-soft: #f1f5f9;
 
   /* Categorical series — deliberately varied, ordered so the first three are
      furthest apart. Every hue is pulled back from full saturation so a chart
      with eight series still reads as one product, not a rainbow. */
-  --c1: #1e40af;  /* darkblue  */
-  --c2: #f97316;  /* orange    */
-  --c3: #38bdf8;  /* skyblue   */
-  --c4: #8b5cf6;  /* purple    */
-  --c5: #e0508f;  /* rose      */
-  --c6: #eab308;  /* yellow    */
-  --c7: #0d9488;  /* teal      */
-  --c8: #6366f1;  /* indigo    */
-  --grid: #eceff3;
+  --c1: #2563eb;  /* blue     */
+  --c2: #10b981;  /* green    */
+  --c3: #f59e0b;  /* orange   */
+  --c4: #ec4899;  /* rose     */
+  --c5: #8b5cf6;  /* purple   */
+  --c6: #38bdf8;  /* skyblue  */
+  --c7: #0d9488;  /* teal     */
+  --c8: #ef4444;  /* red      */
+  --grid: #eef2f7;
 
   /* Type */
   --font-ui: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -103,13 +106,13 @@
   --pop:   0 4px 10px rgba(20, 33, 61, .08), 0 16px 40px rgba(20, 33, 61, .14);
 
   /* Dark navigation rail against a light canvas — the main hierarchy device */
-  --rail-bg:     #0c3d24;
-  --rail-bg-alt: #125131;
-  --rail-ink:    #e4f3ea;
-  --rail-ink-dim:#8db9a1;
-  --rail-line:   #145636;
-  --rail-active: #17663d;
-  --rail-dot:    #4ade80;
+  --rail-bg:     #172554;
+  --rail-bg-alt: #1e3268;
+  --rail-ink:    #e2e8f0;
+  --rail-ink-dim:#94a3b8;
+  --rail-line:   #23346b;
+  --rail-active: #24397a;
+  --rail-dot:    #38bdf8;
 
   --rail-w: 244px;
   --rail-w-collapsed: 60px;
@@ -122,57 +125,54 @@
 
 [data-theme='dark'] {
   --canvas:         #0b1120;
-  --canvas-tint:    #0e1526;
-  --surface:        #141d33;
-  --surface-sunk:   #101829;
-  --surface-raised: #1a2440;
-  --overlay:        rgba(3, 8, 17, .68);
+  --canvas-tint:    #0d1526;
+  --surface:        #111827;
+  --surface-sunk:   #0e1521;
+  --surface-raised: #172033;
+  --overlay:        rgba(2, 6, 16, .7);
 
-  --ink-900: #e8eef8;
-  --ink-700: #c3cee0;
-  --ink-600: #94a3bd;
-  --ink-400: #6d7d99;
-  --ink-300: #55647e;
+  --ink-900: #f8fafc;
+  --ink-700: #cbd5e1;
+  --ink-600: #94a3b8;
+  --ink-400: #7c8aa3;
+  --ink-300: #566175;
 
-  --line:        #1e304a;
-  --line-strong: #2b405e;
-  --line-faint:  #17273e;
+  --line:        #243047;
+  --line-strong: #33415c;
+  --line-faint:  #1b2436;
 
   --navy:          #0b1120;
   --navy-strong:   #060b16;
-  --accent:        #4ade80;
-  --accent-hover:  #6ee79b;
-  --accent-strong: #86efac;
-  --accent-soft:   #0f2e1d;
-  --accent-line:   #1d5a35;
-  --accent-ink:    #04210f;
-  --accent-bright: #4ade80;
+  --accent:        #3b82f6;
+  --accent-hover:  #60a5fa;
+  --accent-strong: #93c5fd;
+  --accent-soft:   #152744;
+  --accent-line:   #23406b;
+  --accent-ink:    #061021;
+  --accent-bright: #3b82f6;
 
-  --mint:       #35c99a;
-  --mint-hover: #4fd6ab;
-  --mint-soft:  #0f2c25;
-  --mint-line:  #1c5042;
+  --pos: #10b981; --pos-soft: #0d2b23;
+  --warn: #f59e0b; --warn-soft: #33260f;
+  --neg: #ef4444; --neg-soft: #331717;
+  --signal: #f59e0b; --signal-soft: #33260f;
+  --purple: #8b5cf6; --purple-soft: #221a3a;
+  --mint: #10b981; --mint-soft: #0d2b23; --mint-line: #17513f; --mint-hover: #34d399;
+  --info: #3b82f6; --info-soft: #152744;
+  --idle: #94a3bd; --idle-soft: #1b2436;
 
-  --pos: #35c99a; --pos-soft: #0f2c25;
-  --warn: #f0a94e; --warn-soft: #2e2211;
-  --neg: #ff6b73; --neg-soft: #3a1418;
-  --signal: #ff6b73; --signal-soft: #3a1418;
-  --info: #8fa8d8; --info-soft: #18213a;
-  --idle: #94a0bd; --idle-soft: #161f36;
-
-  --c1: #6f8ff5; --c2: #fb923c; --c3: #7dd3fc; --c4: #a78bfa;
-  --c5: #facc15; --c6: #f472b6; --c7: #2dd4bf; --c8: #818cf8;
+  --c1: #3b82f6; --c2: #f59e0b; --c3: #10b981; --c4: #a78bfa;
+  --c5: #38bdf8; --c6: #ef4444; --c7: #2dd4bf; --c8: #ec4899;
   --grid: #1a2338;
 
   --sh-sm: 0 1px 2px rgba(0,0,0,.3);
   --sh-md: 0 1px 3px rgba(0,0,0,.35), 0 4px 14px rgba(0,0,0,.3);
   --pop:   0 2px 8px rgba(0,0,0,.45), 0 16px 40px rgba(0,0,0,.5);
 
-  --rail-bg:     #061f12;
-  --rail-bg-alt: #0b2e1b;
-  --rail-ink:    #dcece2;
-  --rail-ink-dim:#79a48b;
-  --rail-line:   #0f3520;
-  --rail-active: #114526;
-  --rail-dot:    #4ade80;
+  --rail-bg:     #0d1424;
+  --rail-bg-alt: #16203a;
+  --rail-ink:    #e2e8f0;
+  --rail-ink-dim:#8896ae;
+  --rail-line:   #1d2740;
+  --rail-active: #1b2b4d;
+  --rail-dot:    #3b82f6;
 }

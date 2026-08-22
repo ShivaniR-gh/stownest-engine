@@ -25,6 +25,17 @@ export type ColumnType =
   | 'text' | 'longtext' | 'number' | 'currency' | 'percent'
   | 'date' | 'datetime' | 'enum' | 'boolean' | 'email' | 'phone' | 'id';
 
+/**
+ * What a column MEANS, as distinct from what it holds.
+ *
+ * `type` says "Total Space (sqft)" is a number. `role` says it is a CAPACITY —
+ * which is what lets utilisation be expressed once, generically, instead of
+ * once per department in React.
+ */
+export type SemanticRole =
+  | 'identifier' | 'name' | 'location' | 'category' | 'status' | 'date'
+  | 'quantity' | 'capacity' | 'occupied' | 'amount' | 'cost' | 'revenue';
+
 export interface ColumnDef {
   /** Stable internal key. Metrics and code reference this, never the sheet header. */
   key: string;
@@ -33,6 +44,8 @@ export interface ColumnDef {
   /** Exact header text in the Google Sheet. Unset => column is unmapped and any
    *  metric depending on it renders "Data unavailable". */
   sheetColumn?: string;
+  /** Semantic meaning, set by the admin in the field-mapping step. */
+  role?: SemanticRole;
   enumValues?: string[];
   /** Maps an enum value to a semantic tone for badges. */
   tone?: Record<string, 'pos' | 'neg' | 'signal' | 'idle' | 'accent'>;

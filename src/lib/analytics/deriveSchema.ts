@@ -1,4 +1,4 @@
-import type { ColumnDef, DatasetDef, MetricDef, Row } from '@/config/types';
+import type { ColumnDef, DatasetDef, MetricDef, Row, SemanticRole } from '@/config/types';
 import type { ResolvedMetric } from './resolveMetric';
 import { formatCompactNum, formatInt, formatMetric, toNum } from '@/lib/format';
 import { pctChange } from './aggregate';
@@ -23,6 +23,10 @@ export interface DerivedSchema {
   dateColumn: ColumnDef | null;
   statusColumn: ColumnDef | null;
   primaryDimension: ColumnDef | null;
+  /** Columns by declared semantic role. */
+  roles: Partial<Record<SemanticRole, ColumnDef>>;
+  /** True when capacity AND occupied are both mapped: utilisation is computable. */
+  hasUtilisation: boolean;
 }
 
 const cardinality = (rows: Row[], key: string) =>
@@ -56,7 +60,90 @@ export function deriveSchema(ds: DatasetDef, rows: Row[]): DerivedSchema {
   // Prefer a dimension that is not the status column, so the two charts differ.
   const primaryDimension = dimensions.find(c => c.key !== statusColumn?.key) ?? dimensions[0] ?? null;
 
-  return { dimensions, measures, dateColumn, statusColumn, primaryDimension };
+  const roles: Partial<Record<SemanticRole, ColumnDef>> = {};
+  for (const c of mapped) if (c.role && !roles[c.role]) roles[c.role] = c;
+
+  return {
+    dimensions, measures, dateColumn, statusColumn, primaryDimension, roles,
+    hasUtilisation: Boolean(roles.capacity && roles.occupied),
+  };
+}
+
+/* ------------------------- role-driven analytics ------------------------- */
+
+export const sumOf = (rows: Row[], col?: ColumnDef) =>
+  col ? rows.reduce((a, r) => a + (toNum(r[col.key]) ?? 0), 0) : 0;
+
+export interface UtilisationRow {
+  key: string; capacity: number; occupied: number; available: number;
+  pct: number; band: 'low' | 'healthy' | 'high' | 'full'; rows: Row[];
+}
+
+/** Thresholds are stated once here so the table, charts and insights agree. */
+export function band(pct: number): UtilisationRow['band'] {
+  if (pct >= 95) return 'full';
+  if (pct >= 85) return 'high';
+  if (pct >= 70) return 'healthy';
+  return 'low';
+}
+
+export const BAND_LABEL: Record<UtilisationRow['band'], string> = {
+  low: 'Low utilisation', healthy: 'Healthy', high: 'High utilisation', full: 'Near full',
+};
+export const BAND_TONE: Record<UtilisationRow['band'], 'pos' | 'accent' | 'signal' | 'neg'> = {
+  low: 'accent', healthy: 'pos', high: 'signal', full: 'neg',
+};
+
+/** Utilisation grouped by any dimension — warehouse, location, anything mapped. */
+export function utilisationBy(
+  rows: Row[], dimension: ColumnDef, schema: DerivedSchema, limit = 40,
+): UtilisationRow[] {
+  if (!schema.hasUtilisation) return [];
+  const map = new Map<string, Row[]>();
+  for (const r of rows) {
+    const k = String(r[dimension.key] ?? '').trim() || 'Unspecified';
+    (map.get(k) ?? map.set(k, []).get(k)!).push(r);
+  }
+  return [...map.entries()].map(([key, rs]) => {
+    const capacity = sumOf(rs, schema.roles.capacity);
+    const occupied = sumOf(rs, schema.roles.occupied);
+    const pct = capacity > 0 ? (occupied / capacity) * 100 : 0;
+    return { key, capacity, occupied, available: capacity - occupied, pct, band: band(pct), rows: rs };
+  }).sort((a, b) => b.pct - a.pct).slice(0, limit);
+}
+
+/** Observations stated only when the data supports them. Never estimated. */
+export function insights(rows: Row[], schema: DerivedSchema): string[] {
+  if (!schema.hasUtilisation || !rows.length) return [];
+  const out: string[] = [];
+  const nameCol = schema.roles.name ?? schema.primaryDimension;
+  const locCol = schema.roles.location;
+
+  const capacity = sumOf(rows, schema.roles.capacity);
+  const occupied = sumOf(rows, schema.roles.occupied);
+  if (capacity <= 0) return out;
+
+  const byName = nameCol ? utilisationBy(rows, nameCol, schema) : [];
+  const critical = byName.filter(u => u.band === 'full');
+  if (critical.length) {
+    out.push(`${critical.length} ${nameCol!.header.toLowerCase()}${critical.length > 1 ? 's are' : ' is'} at or above 95% utilisation.`);
+  }
+  const atCap = byName.filter(u => u.pct >= 99.95);
+  if (atCap.length) out.push(`${atCap.slice(0, 3).map(u => u.key).join(', ')} ${atCap.length > 1 ? 'have' : 'has'} no remaining capacity.`);
+
+  if (locCol) {
+    const byLoc = utilisationBy(rows, locCol, schema);
+    const freest = [...byLoc].sort((a, b) => b.available - a.available)[0];
+    if (freest && freest.available > 0) {
+      out.push(`${freest.key} holds the largest available capacity at ${Math.round(freest.available).toLocaleString('en-IN')} ${schema.roles.capacity?.header.match(/\(([^)]+)\)/)?.[1] ?? 'units'}.`);
+    }
+    const tightest = byLoc[0];
+    if (tightest && tightest.pct >= 95) out.push(`${tightest.key} is running at ${tightest.pct.toFixed(1)}% utilisation.`);
+  }
+
+  const spare = capacity - occupied;
+  if (spare > 0) out.push(`${((spare / capacity) * 100).toFixed(1)}% of total capacity is unused.`);
+  return out.slice(0, 4);
 }
 
 /* -------------------------- derived KPI cards ---------------------------- */
@@ -97,6 +184,38 @@ export function deriveKpis(
   ds: DatasetDef, rows: Row[], prevRows: Row[], schema: DerivedSchema, limit = 6,
 ): ResolvedMetric[] {
   const out: ResolvedMetric[] = [];
+  const cap = schema.roles.capacity, occ = schema.roles.occupied;
+
+  // Roles mapped: state the business metrics properly, with real formulas.
+  if (cap && occ) {
+    const unit = cap.header.match(/\(([^)]+)\)/)?.[1];
+    const mk = (id: string, label: string, formula: string, definition: string,
+                fn: (rs: Row[]) => number, format: MetricDef['format'], dir: 'up' | 'down' | 'neutral') =>
+      resolved(
+        { ...synthetic(`${ds.id}.${id}`, label, ds, formula, definition, [cap.key, occ.key], format, unit),
+          goodDirection: dir },
+        rows.length ? fn(rows) : null, prevRows.length ? fn(prevRows) : null);
+
+    out.push(mk('capacity', `Total ${cap.header.replace(/\s*\([^)]*\)/, '')}`,
+      `SUM(${ds.sheetName}.${cap.sheetColumn})`,
+      `Total capacity across every record in view, from the column mapped as capacity.`,
+      rs => sumOf(rs, cap), 'int', 'neutral'));
+
+    out.push(mk('occupied', `Occupied`,
+      `SUM(${ds.sheetName}.${occ.sheetColumn})`,
+      `Capacity currently in use, from the column mapped as occupied.`,
+      rs => sumOf(rs, occ), 'int', 'neutral'));
+
+    out.push(mk('available', `Available`,
+      `SUM(${cap.sheetColumn}) − SUM(${occ.sheetColumn})`,
+      `Capacity not currently in use. Derived, not read from a column.`,
+      rs => sumOf(rs, cap) - sumOf(rs, occ), 'int', 'up'));
+
+    out.push(mk('utilisation', `Utilisation`,
+      `SUM(${occ.sheetColumn}) ÷ SUM(${cap.sheetColumn}) × 100`,
+      `Share of capacity in use. High utilisation is efficient until it becomes a constraint.`,
+      rs => { const c = sumOf(rs, cap); return c > 0 ? (sumOf(rs, occ) / c) * 100 : 0; }, 'pct', 'neutral'));
+  }
 
   out.push(resolved(
     synthetic(`${ds.id}.count`, `${ds.label} records`, ds,

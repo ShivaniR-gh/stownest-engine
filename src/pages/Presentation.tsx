@@ -15,7 +15,8 @@ import { useDatasets } from '@/lib/data/useDataset';
 import { useAnalytics } from '@/lib/analytics/AnalyticsContext';
 import { applyFilters, applyPeriod, describePeriod } from '@/lib/analytics/filters';
 import { groupBy, timeSeries } from '@/lib/analytics/aggregate';
-import { deriveKpis, deriveSchema, summariseBy } from '@/lib/analytics/deriveSchema';
+import { deriveKpis, deriveSchema, insights, summariseBy } from '@/lib/analytics/deriveSchema';
+import { CapacitySplit, GroupOverview, Insights, UtilisationRanking } from '@/components/metrics/UtilisationPanels';
 import { allDatasets } from '@/config/datasets';
 import { activeDepartments } from '@/config/departments';
 import { METRICS } from '@/config/metrics';
@@ -163,7 +164,13 @@ function Analytics({ ds, rows, schema, derived, configured, compare }: {
   compare: boolean;
 }) {
   const { period } = useAnalytics();
-  const { statusColumn, primaryDimension, dateColumn, measures, dimensions } = schema;
+  const { statusColumn, primaryDimension, dateColumn, measures, dimensions, roles, hasUtilisation } = schema;
+
+  // Roles turn generic aggregates into real business analytics. Rendered only
+  // when the mapping supports them — never approximated.
+  const nameDim = roles.name ?? primaryDimension;
+  const locDim = roles.location;
+  const observations = useMemo(() => insights(rows, schema), [rows, schema]);
 
   const money = (n: number) => (measures[0]?.type === 'currency' ? formatINRCompact(n) : formatCompactNum(n));
 
@@ -201,6 +208,38 @@ function Analytics({ ds, rows, schema, derived, configured, compare }: {
         <SectionHeader title="Key figures" note={`${formatInt(rows.length)} records · tab ${ds.sheetName}`} />
         <MetricGrid metrics={[...configured, ...derived]} compare={compare} />
       </section>
+
+      {hasUtilisation && (
+        <>
+          {observations.length > 0 && (
+            <section className="section">
+              <SectionHeader title="What the data says" note="Derived from the rows in view" />
+              <Insights items={observations} />
+            </section>
+          )}
+
+          <section className="section">
+            <SectionHeader title="Capacity" />
+            <div className="grid grid--split">
+              {nameDim ? (
+                <UtilisationRanking ds={ds} rows={rows} schema={schema} dimension={nameDim}
+                  title={`Utilisation by ${nameDim.header}`}
+                  question={`Which ${nameDim.header.toLowerCase()} values are closest to full?`} />
+              ) : <div />}
+              <CapacitySplit ds={ds} rows={rows} schema={schema} />
+            </div>
+          </section>
+
+          {locDim && locDim.key !== nameDim?.key && (
+            <section className="section">
+              <SectionHeader title={`Utilisation by ${locDim.header}`} />
+              <UtilisationRanking ds={ds} rows={rows} schema={schema} dimension={locDim}
+                title={`By ${locDim.header}`} limit={12}
+                question={`Which ${locDim.header.toLowerCase()} is under the most pressure?`} />
+            </section>
+          )}
+        </>
+      )}
 
       <section className="section">
         <SectionHeader title="Analysis" />
@@ -243,7 +282,14 @@ function Analytics({ ds, rows, schema, derived, configured, compare }: {
         </div>
       </section>
 
-      {primaryDimension && summaries.length > 1 && (
+      {hasUtilisation && locDim && (
+        <section className="section">
+          <SectionHeader title={`${locDim.header} overview`} note="Capacity rollup per group" />
+          <GroupOverview rows={rows} schema={schema} dimension={locDim} />
+        </section>
+      )}
+
+      {!hasUtilisation && primaryDimension && summaries.length > 1 && (
         <section className="section">
           <SectionHeader title={`Summary by ${primaryDimension.header}`}
             note={`${summaries.length} groups`} />
