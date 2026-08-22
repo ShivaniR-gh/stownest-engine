@@ -1,47 +1,67 @@
 /* ==========================================================================
    StowNest design tokens
-   Colour carries meaning. Amber is reserved for states that need a human.
+   Deep navy carries structure and primary action. Mint signals health and
+   positive movement. Amber is reserved for states that need a human — it is
+   the one hue that must never be used decoratively, or the signal stops
+   reading. Everything else is neutral so the data can hold the colour.
    ========================================================================== */
 :root {
-  /* Surfaces — cool paper, not white-on-white */
-  --canvas:        #f4f5f7;
-  --surface:       #ffffff;
-  --surface-sunk:  #fafbfc;
-  --surface-raised:#ffffff;
-  --overlay:       rgba(20, 22, 26, 0.32);
+  /* Surfaces — bright, spacious, faintly cool */
+  --canvas:         #f5f7fa;
+  --canvas-tint:    #eef2f7;
+  --surface:        #ffffff;
+  --surface-sunk:   #f7f9fc;
+  --surface-raised: #ffffff;
+  --overlay:        rgba(11, 22, 44, 0.42);
 
   /* Ink */
-  --ink-900: #14161a;
-  --ink-700: #383d46;
-  --ink-600: #565c66;
-  --ink-400: #868d99;
-  --ink-300: #a8aeb8;
+  --ink-900: #0f1b33;
+  --ink-700: #33415c;
+  --ink-600: #5a6883;
+  --ink-400: #8492ac;
+  --ink-300: #a9b4c8;
 
-  /* Structure — hairlines, never boxes */
-  --line:        #e2e5ea;
-  --line-strong: #cfd4dc;
-  --line-faint:  #eef0f3;
+  /* Structure */
+  --line:        #e3e9f2;
+  --line-strong: #cdd6e4;
+  --line-faint:  #eef2f8;
 
-  /* Accent — navigation, primary action, focus. Deep and desaturated. */
-  --accent:       #1f3d7a;
-  --accent-hover: #18305f;
-  --accent-soft:  #eaeff8;
-  --accent-line:  #c3d0e8;
+  /* Primary — deep navy */
+  --accent:        #14336b;
+  --accent-hover:  #0e2650;
+  --accent-strong: #0a1c3d;
+  --accent-soft:   #e8eef9;
+  --accent-line:   #c2d0e8;
+  --accent-ink:    #ffffff;
+
+  /* Secondary — mint. Health, positive movement, active state. */
+  --mint:        #0d9f6e;
+  --mint-hover:  #0b8a5f;
+  --mint-soft:   #e3f6ef;
+  --mint-line:   #b6e5d3;
 
   /* Semantic */
-  --pos:      #146b4c;
-  --pos-soft: #e6f2ed;
-  --neg:      #9e2a2b;
-  --neg-soft: #fbeaea;
-  --signal:      #b26a00;   /* attention only: delayed, overdue, stale */
-  --signal-soft: #fdf1e0;
-  --idle:      #565c66;
-  --idle-soft: #eef0f3;
+  --pos:      #0d9f6e;
+  --pos-soft: #e3f6ef;
+  --neg:      #c0392f;
+  --neg-soft: #fdecea;
+  --signal:      #b45309;   /* attention only */
+  --signal-soft: #fdf2e3;
+  --info:      #14336b;
+  --info-soft: #e8eef9;
+  --idle:      #5a6883;
+  --idle-soft: #eef2f8;
 
-  /* Categorical series — harmonised, muted, deliberately not a rainbow */
-  --c1: #1f3d7a; --c2: #2e7d6b; --c3: #b26a00; --c4: #8c3f52;
-  --c5: #4c6182; --c6: #5d5a7d; --c7: #3a7ca5; --c8: #7a6a55;
-  --grid: #edeff2;
+  /* Categorical series — harmonised, navy-and-mint led, no rainbow */
+  --c1: #14336b;  /* navy      */
+  --c2: #0d9f6e;  /* mint      */
+  --c3: #b45309;  /* amber     */
+  --c4: #9d3f60;  /* rose      */
+  --c5: #4a6a9c;  /* steel     */
+  --c6: #6b5b95;  /* violet    */
+  --c7: #17798a;  /* teal      */
+  --c8: #8a6a4a;  /* clay      */
+  --grid: #edf1f7;
 
   /* Type */
   --font-ui: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -53,58 +73,86 @@
   --fs-sm: 13px;
   --fs-base: 14px;
   --fs-lg: 16px;
-  --fs-xl: 20px;
-  --fs-2xl: 26px;
-  --fs-3xl: 34px;
+  --fs-xl: 21px;
+  --fs-2xl: 28px;
+  --fs-3xl: 38px;
 
   /* Space — 4px base */
   --s1: 4px;  --s2: 8px;  --s3: 12px; --s4: 16px;
   --s5: 20px; --s6: 24px; --s7: 32px; --s8: 40px; --s9: 56px;
 
-  --r-sm: 4px; --r-md: 6px; --r-lg: 8px;
+  --r-sm: 5px; --r-md: 8px; --r-lg: 12px; --r-xl: 16px;
 
-  /* One shadow, used only for things that float */
-  --pop: 0 1px 2px rgba(20,22,26,.06), 0 8px 24px rgba(20,22,26,.10);
+  /* Shadows — soft, low, never dramatic */
+  --sh-sm: 0 1px 2px rgba(15, 27, 51, .05);
+  --sh-md: 0 1px 3px rgba(15, 27, 51, .06), 0 4px 12px rgba(15, 27, 51, .05);
+  --pop:   0 2px 6px rgba(15, 27, 51, .08), 0 12px 32px rgba(15, 27, 51, .12);
 
-  --rail-w: 236px;
-  --rail-w-collapsed: 56px;
-  --topbar-h: 52px;
-  --controlbar-h: 49px;
+  /* Dark navigation rail against a light canvas — the main hierarchy device */
+  --rail-bg:     #0c1a33;
+  --rail-bg-alt: #142845;
+  --rail-ink:    #dbe4f2;
+  --rail-ink-dim:#8ea2c0;
+  --rail-line:   #1d3355;
+  --rail-active: #16325e;
 
-  --t-fast: 110ms cubic-bezier(.4,0,.2,1);
-  --t-med: 200ms cubic-bezier(.4,0,.2,1);
+  --rail-w: 244px;
+  --rail-w-collapsed: 60px;
+  --topbar-h: 58px;
+  --controlbar-h: 52px;
+
+  --t-fast: 120ms cubic-bezier(.4,0,.2,1);
+  --t-med: 220ms cubic-bezier(.4,0,.2,1);
 }
 
 [data-theme='dark'] {
-  --canvas:        #0f1114;
-  --surface:       #16191d;
-  --surface-sunk:  #121519;
-  --surface-raised:#1b1f24;
-  --overlay:       rgba(0,0,0,.6);
+  --canvas:         #0a1526;
+  --canvas-tint:    #0d1b30;
+  --surface:        #101f36;
+  --surface-sunk:   #0d1a2e;
+  --surface-raised: #16283f;
+  --overlay:        rgba(3, 8, 17, .68);
 
-  --ink-900: #e9ecf0;
-  --ink-700: #c3c8d0;
-  --ink-600: #9aa1ab;
-  --ink-400: #737a85;
-  --ink-300: #5b626c;
+  --ink-900: #e8eef8;
+  --ink-700: #c3cee0;
+  --ink-600: #94a3bd;
+  --ink-400: #6d7d99;
+  --ink-300: #55647e;
 
-  --line:        #262b31;
-  --line-strong: #343a42;
-  --line-faint:  #1e2228;
+  --line:        #1e304a;
+  --line-strong: #2b405e;
+  --line-faint:  #17273e;
 
-  --accent:       #6f97e0;
-  --accent-hover: #85a8e8;
-  --accent-soft:  #1a2331;
-  --accent-line:  #2c3a52;
+  --accent:        #6f9ae8;
+  --accent-hover:  #86abee;
+  --accent-strong: #a8c4f3;
+  --accent-soft:   #16294a;
+  --accent-line:   #29416b;
+  --accent-ink:    #08131f;
 
-  --pos: #4fb389; --pos-soft: #16251f;
-  --neg: #e0787a; --neg-soft: #2a1a1b;
-  --signal: #d9973e; --signal-soft: #2a2015;
-  --idle: #9aa1ab; --idle-soft: #1e2228;
+  --mint:       #34d3a0;
+  --mint-hover: #4fdcae;
+  --mint-soft:  #102f28;
+  --mint-line:  #1d5344;
 
-  --c1: #6f97e0; --c2: #4fb08f; --c3: #d9973e; --c4: #c8757f;
-  --c5: #8496b5; --c6: #928fb3; --c7: #66a8cc; --c8: #ab9a80;
-  --grid: #23282e;
+  --pos: #34d3a0; --pos-soft: #102f28;
+  --neg: #ef7f78; --neg-soft: #331a1b;
+  --signal: #e0a052; --signal-soft: #302213;
+  --info: #6f9ae8; --info-soft: #16294a;
+  --idle: #94a3bd; --idle-soft: #17273e;
 
-  --pop: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.5);
+  --c1: #6f9ae8; --c2: #34d3a0; --c3: #e0a052; --c4: #d98098;
+  --c5: #8aa6cf; --c6: #a396d4; --c7: #58bccf; --c8: #c0a184;
+  --grid: #1b2b43;
+
+  --sh-sm: 0 1px 2px rgba(0,0,0,.3);
+  --sh-md: 0 1px 3px rgba(0,0,0,.35), 0 4px 14px rgba(0,0,0,.3);
+  --pop:   0 2px 8px rgba(0,0,0,.45), 0 16px 40px rgba(0,0,0,.5);
+
+  --rail-bg:     #08121f;
+  --rail-bg-alt: #0e1d31;
+  --rail-ink:    #dbe4f2;
+  --rail-ink-dim:#7d8ea9;
+  --rail-line:   #172740;
+  --rail-active: #16294a;
 }

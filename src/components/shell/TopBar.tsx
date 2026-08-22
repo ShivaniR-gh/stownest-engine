@@ -28,11 +28,7 @@ export function TopBar({ title, crumb, actions }: {
 
         <Popover width={230} align="end" trigger={({ toggle: t, ref, open }) => (
           <Button size="sm" ref={ref} onClick={t} aria-expanded={open}>
-            <span style={{
-              width: 18, height: 18, borderRadius: '50%', background: 'var(--accent-soft)',
-              color: 'var(--accent)', display: 'grid', placeItems: 'center',
-              fontSize: 10, fontWeight: 700,
-            }}>
+            <span className="topbar__avatar">
               {(principal?.name ?? '?').slice(0, 1).toUpperCase()}
             </span>
             <Icon name="chevronDown" size={12} />

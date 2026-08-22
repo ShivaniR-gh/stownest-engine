@@ -30,7 +30,10 @@ export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
     <aside className="rail">
       <div className="rail__brand">
         <span className="rail__mark" aria-hidden="true">SN</span>
-        <span className="rail__word">STOWNEST</span>
+        <span className="rail__brandtext">
+          <span className="rail__word">STOWNEST</span>
+          <span className="rail__tag">Storage &amp; Operations</span>
+        </span>
       </div>
 
       <nav className="rail__nav" aria-label="Primary">

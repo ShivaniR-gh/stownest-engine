@@ -5,6 +5,7 @@ html, body, #root { height: 100%; }
 body {
   margin: 0;
   background: var(--canvas);
+  transition: background var(--t-med), color var(--t-med);
   color: var(--ink-900);
   font-family: var(--font-ui);
   font-size: var(--fs-base);
@@ -28,8 +29,8 @@ table { border-collapse: separate; border-spacing: 0; }
 
 .eyebrow {
   font-size: var(--fs-eyebrow);
-  font-weight: 600;
-  letter-spacing: .07em;
+  font-weight: 700;
+  letter-spacing: .1em;
   text-transform: uppercase;
   color: var(--ink-400);
 }

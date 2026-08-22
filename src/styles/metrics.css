@@ -1,29 +1,72 @@
 /* ==========================================================================
-   Metric card. The `ƒ` affordance flips the card to expose the exact formula
-   and source columns. A metric that cannot be computed says so, and names
-   the column it is missing. It never guesses.
+   Metric cards.
+   Cards are NOT identical: a tonal top edge and a tinted value are derived
+   from the metric's own state — the first card in a row is emphasised, a
+   positive delta earns mint, a negative one rose, an attention state amber.
+   The variation carries meaning, so it survives the data changing.
    ========================================================================== */
 .metric {
-  position: relative; background: var(--surface); border: 1px solid var(--line);
-  border-radius: var(--r-lg); padding: var(--s3) var(--s4) var(--s4);
-  min-height: 104px; display: flex; flex-direction: column;
-  transition: border-color var(--t-fast);
+  position: relative; overflow: hidden;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--r-lg); padding: var(--s4) var(--s5) var(--s5);
+  min-height: 126px; display: flex; flex-direction: column;
+  box-shadow: var(--sh-sm);
+  transition: border-color var(--t-fast), box-shadow var(--t-fast), transform var(--t-fast);
 }
-.metric:hover { border-color: var(--line-strong); }
-.metric--clickable { cursor: pointer; }
-.metric--clickable:hover { border-color: var(--accent-line); background: var(--surface-sunk); }
+.metric::before {
+  content: ''; position: absolute; inset: 0 0 auto 0; height: 3px;
+  background: var(--line); transition: background var(--t-fast);
+}
+.metric:hover { box-shadow: var(--sh-md); transform: translateY(-1px); }
 
-.metric__hd { display: flex; align-items: center; gap: 6px; margin-bottom: var(--s3); min-height: 16px; }
+/* Tone is derived from the metric, never chosen decoratively. */
+.metric[data-tone='pos']::before    { background: var(--mint); }
+.metric[data-tone='neg']::before    { background: var(--neg); }
+.metric[data-tone='signal']::before { background: var(--signal); }
+.metric[data-tone='void']::before   { background: var(--line-strong); }
+
+/* The lead metric of a row gets the navy field: the number you read first. */
+.metric--lead {
+  background: linear-gradient(155deg, var(--accent), var(--accent-strong));
+  border-color: var(--accent-strong);
+}
+.metric--lead::before { background: var(--mint); }
+.metric--lead .metric__label { color: rgba(255,255,255,.72); }
+.metric--lead .metric__value { color: #fff; }
+.metric--lead .metric__cmp   { color: rgba(255,255,255,.6); }
+.metric--lead .metric__fx    { color: rgba(255,255,255,.55); }
+.metric--lead .metric__fx:hover,
+.metric--lead .metric__fx[aria-expanded='true'] { background: rgba(255,255,255,.14); color: #fff; }
+.metric--lead .metric__icon  { background: rgba(255,255,255,.12); color: #fff; border-color: transparent; }
+.metric--lead .delta--pos    { color: #6fe7bd; }
+.metric--lead .delta--neg    { color: #ffa39c; }
+.metric--lead .metric__track { background: rgba(255,255,255,.18); }
+
+.metric--clickable { cursor: pointer; }
+.metric--clickable:hover { border-color: var(--accent-line); }
+
+.metric__hd { display: flex; align-items: center; gap: var(--s2); margin-bottom: var(--s3); min-height: 24px; }
+.metric__icon {
+  width: 26px; height: 26px; border-radius: var(--r-sm); flex-shrink: 0;
+  display: grid; place-items: center;
+  background: var(--accent-soft); color: var(--accent); border: 1px solid var(--accent-line);
+}
+.metric[data-tone='pos'] .metric__icon    { background: var(--mint-soft); color: var(--mint); border-color: var(--mint-line); }
+.metric[data-tone='neg'] .metric__icon    { background: var(--neg-soft); color: var(--neg); border-color: transparent; }
+.metric[data-tone='signal'] .metric__icon { background: var(--signal-soft); color: var(--signal); border-color: transparent; }
+.metric[data-tone='void'] .metric__icon   { background: var(--surface-sunk); color: var(--ink-400); border-color: var(--line); }
+
 .metric__label {
-  font-size: var(--fs-micro); font-weight: 600; letter-spacing: .05em;
+  font-size: var(--fs-micro); font-weight: 650; letter-spacing: .06em;
   text-transform: uppercase; color: var(--ink-400);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .metric__fx {
-  margin-left: auto; width: 18px; height: 18px; flex-shrink: 0;
+  margin-left: auto; width: 20px; height: 20px; flex-shrink: 0;
   display: grid; place-items: center; border-radius: var(--r-sm);
   font-family: var(--font-num); font-size: 11px; font-style: italic;
-  color: var(--ink-300); opacity: 0; transition: opacity var(--t-fast), background var(--t-fast), color var(--t-fast);
+  color: var(--ink-300); opacity: 0;
+  transition: opacity var(--t-fast), background var(--t-fast), color var(--t-fast);
 }
 .metric:hover .metric__fx, .metric__fx:focus-visible { opacity: 1; }
 .metric__fx:hover { background: var(--accent-soft); color: var(--accent); }
@@ -31,49 +74,61 @@
 
 .metric__value {
   font-family: var(--font-num); font-variant-numeric: tabular-nums;
-  font-size: var(--fs-2xl); font-weight: 500; letter-spacing: -.03em;
+  font-size: var(--fs-2xl); font-weight: 550; letter-spacing: -.035em;
   line-height: 1.05; color: var(--ink-900);
 }
-.metric__value--void { color: var(--ink-300); font-size: var(--fs-lg); font-weight: 400; letter-spacing: 0; }
-.metric__unit { font-size: var(--fs-base); color: var(--ink-400); margin-left: 2px; }
+.metric__value--void { color: var(--ink-400); font-size: var(--fs-lg); font-weight: 450; letter-spacing: 0; }
+.metric__unit { font-size: var(--fs-sm); color: var(--ink-400); margin-left: 3px; font-family: var(--font-ui); }
 .metric__ft { margin-top: auto; padding-top: var(--s3); display: flex; align-items: center; gap: var(--s2); flex-wrap: wrap; }
 .metric__cmp { font-size: var(--fs-micro); color: var(--ink-400); white-space: nowrap; }
 
-.delta { display: inline-flex; align-items: center; gap: 3px; font-family: var(--font-num);
-  font-size: var(--fs-xs); font-weight: 600; font-variant-numeric: tabular-nums; }
-.delta--pos { color: var(--pos); }
-.delta--neg { color: var(--neg); }
-.delta--flat { color: var(--ink-400); }
+/* Percentage metrics get a real progress track — meaningful, not decorative. */
+.metric__track {
+  width: 100%; height: 5px; border-radius: 3px; background: var(--surface-sunk);
+  margin-top: var(--s3); overflow: hidden;
+}
+.metric__track span { display: block; height: 100%; border-radius: 3px; background: var(--accent); transition: width var(--t-med); }
+.metric[data-tone='pos'] .metric__track span    { background: var(--mint); }
+.metric[data-tone='neg'] .metric__track span    { background: var(--neg); }
+.metric[data-tone='signal'] .metric__track span { background: var(--signal); }
+.metric--lead .metric__track span { background: var(--mint); }
+
+.delta {
+  display: inline-flex; align-items: center; gap: 3px; padding: 2px 7px; border-radius: 999px;
+  font-family: var(--font-num); font-size: var(--fs-xs); font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.delta--pos  { color: var(--pos); background: var(--pos-soft); }
+.delta--neg  { color: var(--neg); background: var(--neg-soft); }
+.delta--flat { color: var(--ink-400); background: var(--idle-soft); }
+.metric--lead .delta--pos, .metric--lead .delta--neg, .metric--lead .delta--flat { background: rgba(255,255,255,.14); }
 
 /* Unavailable state — the honest one */
-.metric__void { display: flex; flex-direction: column; gap: 5px; }
-.metric__voidnote {
-  font-size: var(--fs-micro); color: var(--ink-400); line-height: 1.4;
-}
+.metric__void { display: flex; flex-direction: column; gap: 6px; }
+.metric__voidnote { font-size: var(--fs-micro); color: var(--ink-400); line-height: 1.5; }
 .metric__voidnote code {
   font-family: var(--font-num); font-size: 10.5px; color: var(--signal);
-  background: var(--signal-soft); padding: 1px 4px; border-radius: 3px;
+  background: var(--signal-soft); padding: 1px 5px; border-radius: 4px;
 }
 
-/* Provenance panel — slides over the card face */
+/* Provenance panel */
 .prov {
-  position: absolute; inset: 0; z-index: 5; padding: var(--s3) var(--s4);
+  position: absolute; inset: 0; z-index: 5; padding: var(--s4);
   background: var(--surface-raised); border: 1px solid var(--accent-line);
   border-radius: var(--r-lg); box-shadow: var(--pop);
-  display: flex; flex-direction: column; gap: 7px; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 8px; overflow-y: auto;
   animation: provin var(--t-med) both;
 }
 @keyframes provin { from { opacity: 0; transform: scale(.985) } to { opacity: 1; transform: none } }
 .prov__hd { display: flex; align-items: center; gap: var(--s2); }
 .prov__formula {
-  font-family: var(--font-num); font-size: var(--fs-micro); line-height: 1.55;
+  font-family: var(--font-num); font-size: var(--fs-micro); line-height: 1.6;
   color: var(--ink-900); background: var(--surface-sunk);
-  border: 1px solid var(--line-faint); border-radius: var(--r-sm); padding: 6px 7px;
+  border: 1px solid var(--line); border-radius: var(--r-md); padding: 8px 9px;
   white-space: pre-wrap; word-break: break-word;
 }
 .prov__row { display: flex; gap: var(--s2); font-size: var(--fs-micro); line-height: 1.5; }
-.prov__k { color: var(--ink-400); flex-shrink: 0; min-width: 46px; }
+.prov__k { color: var(--ink-400); flex-shrink: 0; min-width: 50px; }
 .prov__v { color: var(--ink-700); font-family: var(--font-num); font-size: 10.5px; word-break: break-word; }
 
-/* Sparkline strip inside metric */
-.metric__spark { margin-top: var(--s2); height: 26px; }
+.metric__spark { margin-top: var(--s2); height: 28px; }

@@ -16,26 +16,55 @@ import type { ResolvedMetric } from '@/lib/analytics/resolveMetric';
  * number in a management review can check it in one click without leaving the
  * screen or asking an engineer.
  */
+/** Icon chosen from what the metric IS, so it stays correct for any dataset. */
+function iconFor(m: ResolvedMetric): string {
+  if (m.status !== 'ok') return 'info';
+  switch (m.def.format) {
+    case 'inr': case 'inr_compact': return 'ledger';
+    case 'pct': case 'pp': return 'chart';
+    case 'days': return 'clock';
+    default: return 'layers';
+  }
+}
+
+/** Tone derives from the metric's own state — never picked for decoration. */
+function toneFor(m: ResolvedMetric): 'pos' | 'neg' | 'signal' | 'void' | 'none' {
+  if (m.status === 'unmapped') return 'signal';
+  if (m.status !== 'ok') return 'void';
+  if (m.deltaTone === 'pos') return 'pos';
+  if (m.deltaTone === 'neg') return 'neg';
+  return 'none';
+}
+
 export function MetricCard({
-  m, spark, onDrill, compare = true, size = 'md',
+  m, spark, onDrill, compare = true, size = 'md', lead = false,
 }: {
   m: ResolvedMetric;
   spark?: number[];
   onDrill?: () => void;
   compare?: boolean;
   size?: 'md' | 'lg';
+  /** Emphasised treatment for the first metric in a row. */
+  lead?: boolean;
 }) {
   const [showProv, setShowProv] = useState(false);
   const clickable = Boolean(onDrill) && m.status === 'ok' && Boolean(m.def.drillTo);
+  const tone = toneFor(m);
+
+  // A percentage is the one case where a progress track means something.
+  const pct = m.status === 'ok' && (m.def.format === 'pct') && m.value !== null
+    ? Math.max(0, Math.min(100, m.value)) : null;
 
   return (
-    <div className={`metric${clickable ? ' metric--clickable' : ''}`}
+    <div className={`metric${clickable ? ' metric--clickable' : ''}${lead ? ' metric--lead' : ''}`}
+      data-tone={tone === 'none' ? undefined : tone}
       onClick={clickable && !showProv ? onDrill : undefined}
       role={clickable ? 'button' : undefined}
       tabIndex={clickable ? 0 : undefined}
       onKeyDown={e => { if (e.key === 'Enter' && clickable) onDrill?.(); }}>
 
       <div className="metric__hd">
+        <span className="metric__icon"><Icon name={iconFor(m)} size={14} /></span>
         <span className="metric__label" title={m.def.label}>{m.def.label}</span>
         {m.def.unit && <span className="eyebrow" style={{ fontSize: 9.5 }}>{m.def.unit}</span>}
         <button className="metric__fx" aria-expanded={showProv}
@@ -50,7 +79,10 @@ export function MetricCard({
           </div>
           {spark && spark.length > 1 && (
             <Sparkline values={spark}
-              tone={m.deltaTone === 'neg' ? 'var(--neg)' : m.deltaTone === 'pos' ? 'var(--pos)' : 'var(--ink-400)'} />
+              tone={m.deltaTone === 'neg' ? 'var(--neg)' : m.deltaTone === 'pos' ? 'var(--mint)' : 'var(--ink-400)'} />
+          )}
+          {pct !== null && (
+            <span className="metric__track" aria-hidden="true"><span style={{ width: `${pct}%` }} /></span>
           )}
           <div className="metric__ft">
             {compare && m.delta !== null ? (
@@ -114,17 +146,21 @@ export function MetricCard({
 
 /** KPI row. Any metric that cannot compute still occupies its slot — hiding it
  *  would quietly change what management thinks they are looking at. */
-export function MetricGrid({ metrics, sparks, onDrill, compare, size }: {
+export function MetricGrid({ metrics, sparks, onDrill, compare, size, emphasiseFirst = true }: {
   metrics: ResolvedMetric[];
   sparks?: Record<string, number[]>;
   onDrill?: (m: ResolvedMetric) => void;
   compare?: boolean;
   size?: 'md' | 'lg';
+  /** The first computable metric leads the row. Purely visual weighting. */
+  emphasiseFirst?: boolean;
 }) {
+  const leadId = emphasiseFirst ? metrics.find(m => m.status === 'ok')?.def.id : undefined;
   return (
     <div className="grid grid--kpi">
       {metrics.map(m => (
         <MetricCard key={m.def.id} m={m} spark={sparks?.[m.def.id]} compare={compare} size={size}
+          lead={m.def.id === leadId}
           onDrill={onDrill ? () => onDrill(m) : undefined} />
       ))}
     </div>
