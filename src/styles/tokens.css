@@ -7,10 +7,10 @@
    ========================================================================== */
 :root {
   /* Surfaces — warm light canvas, pure white cards */
-  --canvas:         #f4f1f1;
-  --canvas-tint:    #efebeb;
+  --canvas:         #f3f5f4;
+  --canvas-tint:    #eceeed;
   --surface:        #ffffff;
-  --surface-sunk:   #f8f6f6;
+  --surface-sunk:   #f6f9f8;
   --surface-raised: #ffffff;
   --overlay:        rgba(20, 33, 61, 0.44);
 
@@ -22,23 +22,24 @@
   --ink-300: #b3b9c6;
 
   /* Structure */
-  --line:        #e7e4e6;
-  --line-strong: #d3cfd3;
-  --line-faint:  #f0eded;
+  --line:        #e3e9e7;
+  --line-strong: #ccd6d3;
+  --line-faint:  #eef3f1;
 
   /* Structure and navigation — deep navy */
   --navy:          #14213d;
   --navy-strong:   #0d162b;
   --accent-ink:    #ffffff;
 
-  /* Brand accent — orange. Carries data emphasis, active state, primary action.
-     Because orange now reads as "ours", it can no longer double as a warning:
-     attention states use red below, so an alert is never mistaken for branding. */
-  --accent:        #f26b21;
-  --accent-hover:  #dd5a13;
-  --accent-strong: #c14a0c;
-  --accent-soft:   #fdeee4;
-  --accent-line:   #f8cfb4;
+  /* Brand accent — StowNest green. Active navigation, primary action, positive
+     movement. Putting the brand on green frees orange, amber and red entirely
+     for data and alerts, so nothing has to serve two meanings at once. */
+  --accent:        #16a34a;
+  --accent-hover:  #15803d;
+  --accent-strong: #106b33;
+  --accent-soft:   #dcfce7;
+  --accent-line:   #8ee0a8;
+  --accent-bright: #4ade80;   /* the lead-card field */
 
   /* Kept as an alias so existing rules resolve; mint is now a chart hue only. */
   --mint:        #17a673;
@@ -49,6 +50,8 @@
   /* Semantic */
   --pos:      #17a673;
   --pos-soft: #e4f6ef;
+  --warn:      #d98324;   /* amber — a caution, short of an alert */
+  --warn-soft: #fdf1e0;
   /* Attention is a DEEP crimson, not a bright red: bright red sits too close to
      the brand orange to be told apart at a glance, which would make an alert
      look like branding. Verified by contrast audit, not by eye. */
@@ -61,16 +64,18 @@
   --idle:      #626c85;
   --idle-soft: #f0eded;
 
-  /* Categorical series — harmonised, navy-and-mint led, no rainbow */
-  --c1: #f26b21;  /* orange — the lead series      */
-  --c2: #14213d;  /* navy                          */
-  --c3: #17a673;  /* green                         */
-  --c4: #4a6a9c;  /* steel                         */
-  --c5: #a81f16;  /* crimson                       */
-  --c6: #6b5b95;  /* violet                        */
-  --c7: #17798a;  /* teal                          */
-  --c8: #a9713f;  /* clay                          */
-  --grid: #eeeaea;
+  /* Categorical series — deliberately varied, ordered so the first three are
+     furthest apart. Every hue is pulled back from full saturation so a chart
+     with eight series still reads as one product, not a rainbow. */
+  --c1: #1e40af;  /* darkblue  */
+  --c2: #f97316;  /* orange    */
+  --c3: #38bdf8;  /* skyblue   */
+  --c4: #8b5cf6;  /* purple    */
+  --c5: #e0508f;  /* rose      */
+  --c6: #eab308;  /* yellow    */
+  --c7: #0d9488;  /* teal      */
+  --c8: #6366f1;  /* indigo    */
+  --grid: #eceff3;
 
   /* Type */
   --font-ui: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -98,12 +103,13 @@
   --pop:   0 4px 10px rgba(20, 33, 61, .08), 0 16px 40px rgba(20, 33, 61, .14);
 
   /* Dark navigation rail against a light canvas — the main hierarchy device */
-  --rail-bg:     #14213d;
-  --rail-bg-alt: #1d2c4d;
-  --rail-ink:    #e6e8ee;
-  --rail-ink-dim:#939bb0;
-  --rail-line:   #22314f;
-  --rail-active: #23345c;
+  --rail-bg:     #0c3d24;
+  --rail-bg-alt: #125131;
+  --rail-ink:    #e4f3ea;
+  --rail-ink-dim:#8db9a1;
+  --rail-line:   #145636;
+  --rail-active: #17663d;
+  --rail-dot:    #4ade80;
 
   --rail-w: 244px;
   --rail-w-collapsed: 60px;
@@ -134,12 +140,13 @@
 
   --navy:          #0b1120;
   --navy-strong:   #060b16;
-  --accent:        #f9813c;
-  --accent-hover:  #fb9459;
-  --accent-strong: #fda06a;
-  --accent-soft:   #33200f;
-  --accent-line:   #5a3417;
-  --accent-ink:    #1b0d03;
+  --accent:        #4ade80;
+  --accent-hover:  #6ee79b;
+  --accent-strong: #86efac;
+  --accent-soft:   #0f2e1d;
+  --accent-line:   #1d5a35;
+  --accent-ink:    #04210f;
+  --accent-bright: #4ade80;
 
   --mint:       #35c99a;
   --mint-hover: #4fd6ab;
@@ -147,23 +154,25 @@
   --mint-line:  #1c5042;
 
   --pos: #35c99a; --pos-soft: #0f2c25;
+  --warn: #f0a94e; --warn-soft: #2e2211;
   --neg: #ff6b73; --neg-soft: #3a1418;
   --signal: #ff6b73; --signal-soft: #3a1418;
   --info: #8fa8d8; --info-soft: #18213a;
   --idle: #94a0bd; --idle-soft: #161f36;
 
-  --c1: #f9813c; --c2: #8fa8d8; --c3: #35c99a; --c4: #7b93c4;
-  --c5: #ff6b73; --c6: #a396d4; --c7: #58bccf; --c8: #c79a6d;
+  --c1: #6f8ff5; --c2: #fb923c; --c3: #7dd3fc; --c4: #a78bfa;
+  --c5: #facc15; --c6: #f472b6; --c7: #2dd4bf; --c8: #818cf8;
   --grid: #1a2338;
 
   --sh-sm: 0 1px 2px rgba(0,0,0,.3);
   --sh-md: 0 1px 3px rgba(0,0,0,.35), 0 4px 14px rgba(0,0,0,.3);
   --pop:   0 2px 8px rgba(0,0,0,.45), 0 16px 40px rgba(0,0,0,.5);
 
-  --rail-bg:     #080d18;
-  --rail-bg-alt: #111a2e;
-  --rail-ink:    #e6e8ee;
-  --rail-ink-dim:#7d879e;
-  --rail-line:   #172034;
-  --rail-active: #1c2740;
+  --rail-bg:     #061f12;
+  --rail-bg-alt: #0b2e1b;
+  --rail-ink:    #dcece2;
+  --rail-ink-dim:#79a48b;
+  --rail-line:   #0f3520;
+  --rail-active: #114526;
+  --rail-dot:    #4ade80;
 }
