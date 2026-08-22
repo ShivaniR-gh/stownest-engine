@@ -74,24 +74,35 @@ export function deriveSchema(ds: DatasetDef, rows: Row[]): DerivedSchema {
 export const sumOf = (rows: Row[], col?: ColumnDef) =>
   col ? rows.reduce((a, r) => a + (toNum(r[col.key]) ?? 0), 0) : 0;
 
+export type Band = 'low' | 'healthy' | 'moderate' | 'high' | 'critical';
+
 export interface UtilisationRow {
   key: string; capacity: number; occupied: number; available: number;
-  pct: number; band: 'low' | 'healthy' | 'high' | 'full'; rows: Row[];
+  pct: number; band: Band; rows: Row[];
 }
 
-/** Thresholds are stated once here so the table, charts and insights agree. */
-export function band(pct: number): UtilisationRow['band'] {
-  if (pct >= 95) return 'full';
-  if (pct >= 85) return 'high';
-  if (pct >= 70) return 'healthy';
-  return 'low';
-}
+/**
+ * Utilisation thresholds, declared once so the table, bars, badges and insights
+ * can never disagree. Five bands rather than four keeps red for genuinely
+ * critical cases instead of anything merely busy.
+ */
+export const BANDS: { max: number; band: Band }[] = [
+  { max: 60, band: 'low' },
+  { max: 80, band: 'healthy' },
+  { max: 90, band: 'moderate' },
+  { max: 97, band: 'high' },
+  { max: Infinity, band: 'critical' },
+];
 
-export const BAND_LABEL: Record<UtilisationRow['band'], string> = {
-  low: 'Low utilisation', healthy: 'Healthy', high: 'High utilisation', full: 'Near full',
+export const band = (pct: number): Band =>
+  BANDS.find(b => pct < b.max)?.band ?? 'critical';
+
+export const BAND_LABEL: Record<Band, string> = {
+  low: 'Low utilisation', healthy: 'Healthy', moderate: 'Moderate',
+  high: 'High utilisation', critical: 'Near full',
 };
-export const BAND_TONE: Record<UtilisationRow['band'], 'pos' | 'accent' | 'signal' | 'neg'> = {
-  low: 'accent', healthy: 'pos', high: 'signal', full: 'neg',
+export const BAND_TONE: Record<Band, 'pos' | 'accent' | 'signal' | 'neg'> = {
+  low: 'pos', healthy: 'pos', moderate: 'accent', high: 'signal', critical: 'neg',
 };
 
 /** Utilisation grouped by any dimension — warehouse, location, anything mapped. */
@@ -112,6 +123,53 @@ export function utilisationBy(
   }).sort((a, b) => b.pct - a.pct).slice(0, limit);
 }
 
+/** Utilisation per period, for the trend chart. Buckets come from the date role. */
+export interface UtilPoint {
+  key: string; label: string; capacity: number; occupied: number;
+  available: number; pct: number; rows: Row[];
+}
+
+export function utilisationOverTime(
+  rows: Row[], schema: DerivedSchema,
+  bucket: (r: Row) => { key: string; label: string } | null,
+): UtilPoint[] {
+  if (!schema.hasUtilisation) return [];
+  const map = new Map<string, { label: string; rows: Row[] }>();
+  for (const r of rows) {
+    const b = bucket(r);
+    if (!b) continue;
+    if (!map.has(b.key)) map.set(b.key, { label: b.label, rows: [] });
+    map.get(b.key)!.rows.push(r);
+  }
+  return [...map.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, v]) => {
+      const capacity = sumOf(v.rows, schema.roles.capacity);
+      const occupied = sumOf(v.rows, schema.roles.occupied);
+      return {
+        key, label: v.label, capacity, occupied,
+        available: capacity - occupied,
+        pct: capacity > 0 ? (occupied / capacity) * 100 : 0,
+        rows: v.rows,
+      };
+    });
+}
+
+/** How many groups sit in each band — the status distribution strip. */
+export function bandDistribution(units: UtilisationRow[]) {
+  const order: Band[] = ['low', 'healthy', 'moderate', 'high', 'critical'];
+  const total = units.length || 1;
+  return order.map(b => {
+    const inBand = units.filter(u => u.band === b);
+    return {
+      band: b, label: BAND_LABEL[b], tone: BAND_TONE[b],
+      count: inBand.length,
+      share: (inBand.length / total) * 100,
+      capacity: inBand.reduce((a, u) => a + u.capacity, 0),
+    };
+  }).filter(x => x.count > 0);
+}
+
 /** Observations stated only when the data supports them. Never estimated. */
 export function insights(rows: Row[], schema: DerivedSchema): string[] {
   if (!schema.hasUtilisation || !rows.length) return [];
@@ -124,9 +182,9 @@ export function insights(rows: Row[], schema: DerivedSchema): string[] {
   if (capacity <= 0) return out;
 
   const byName = nameCol ? utilisationBy(rows, nameCol, schema) : [];
-  const critical = byName.filter(u => u.band === 'full');
+  const critical = byName.filter(u => u.band === 'critical');
   if (critical.length) {
-    out.push(`${critical.length} ${nameCol!.header.toLowerCase()}${critical.length > 1 ? 's are' : ' is'} at or above 95% utilisation.`);
+    out.push(`${critical.length} ${nameCol!.header.toLowerCase()}${critical.length > 1 ? 's are' : ' is'} at or above 97% utilisation.`);
   }
   const atCap = byName.filter(u => u.pct >= 99.95);
   if (atCap.length) out.push(`${atCap.slice(0, 3).map(u => u.key).join(', ')} ${atCap.length > 1 ? 'have' : 'has'} no remaining capacity.`);
@@ -141,9 +199,16 @@ export function insights(rows: Row[], schema: DerivedSchema): string[] {
     if (tightest && tightest.pct >= 95) out.push(`${tightest.key} is running at ${tightest.pct.toFixed(1)}% utilisation.`);
   }
 
+  const healthy = byName.filter(u => u.band === 'low' || u.band === 'healthy');
+  if (healthy.length) {
+    out.push(`${healthy.length} of ${byName.length} ${nameCol!.header.toLowerCase()}s are below 80% utilisation.`);
+  }
   const spare = capacity - occupied;
-  if (spare > 0) out.push(`${((spare / capacity) * 100).toFixed(1)}% of total capacity is unused.`);
-  return out.slice(0, 4);
+  if (spare > 0) {
+    const unit = schema.roles.capacity?.header.match(/\(([^)]+)\)/)?.[1] ?? '';
+    out.push(`${Math.round(spare).toLocaleString('en-IN')} ${unit} remains available — ${((spare / capacity) * 100).toFixed(1)}% of total capacity.`);
+  }
+  return out.slice(0, 5);
 }
 
 /* -------------------------- derived KPI cards ---------------------------- */

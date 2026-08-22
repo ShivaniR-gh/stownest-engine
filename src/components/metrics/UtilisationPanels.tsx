@@ -1,10 +1,13 @@
 import { Badge, Icon } from '@/components/primitives';
 import { ChartFrame } from '@/components/charts/ChartFrame';
 import { DonutChart } from '@/components/charts/DonutChart';
+import { TrendChart } from '@/components/charts/TrendChart';
+import { CategoryChart } from '@/components/charts/CategoryChart';
 import {
-  BAND_LABEL, BAND_TONE, sumOf, utilisationBy,
+  BAND_LABEL, BAND_TONE, bandDistribution, sumOf, utilisationBy, utilisationOverTime,
   type DerivedSchema, type UtilisationRow,
 } from '@/lib/analytics/deriveSchema';
+import { parseDate } from '@/lib/format';
 import { formatCompactNum, formatInt, formatPct } from '@/lib/format';
 import type { ColumnDef, DatasetDef, Row } from '@/config/types';
 
@@ -134,6 +137,84 @@ export function GroupOverview({
           <div className="sumcard__row"><span>Occupied</span><b>{formatInt(g.occupied)} {unit}</b></div>
           <div className="sumcard__row"><span>Available</span><b>{formatInt(g.available)} {unit}</b></div>
           <div style={{ marginTop: 'var(--s3)' }}><UtilisationBar u={g} /></div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+
+/** Utilisation over time. Buckets come from the column mapped as `date`. */
+export function UtilisationTrend({ ds, rows, schema }: {
+  ds: DatasetDef; rows: Row[]; schema: DerivedSchema;
+}) {
+  const dateCol = schema.roles.date ?? schema.dateColumn;
+  const points = dateCol
+    ? utilisationOverTime(rows, schema, r => {
+        const d = parseDate(r[dateCol.key]);
+        if (!d) return null;
+        return {
+          key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
+          label: d.toLocaleDateString('en-IN', { month: 'short', year: '2-digit' }),
+        };
+      })
+    : [];
+
+  const data = points.map(p => ({
+    key: p.key, label: p.label, rows: p.rows,
+    values: { pct: p.pct, occupied: p.occupied, available: p.available },
+  }));
+
+  return (
+    <ChartFrame title="Space utilisation trend" department={ds.department} height={300}
+      question="Is utilisation rising, and how much headroom is left over time?"
+      isEmpty={data.length < 2}
+      emptyBody={dateCol
+        ? `Not enough historical data — utilisation over time needs at least two periods in “${dateCol.header}”.`
+        : 'Map a column as `date` in the field mapping to see utilisation over time.'}>
+      {h => (
+        <TrendChart height={h} data={data} valueFormat={formatCompactNum} smooth
+          series={[
+            { id: 'occupied', label: 'Occupied', kind: 'area', colorIndex: 0 },
+            { id: 'available', label: 'Available', kind: 'area', colorIndex: 2 },
+            { id: 'pct', label: 'Utilisation %', kind: 'line', colorIndex: 4, axis: 'right',
+              format: (n: number) => formatPct(n, 1) },
+          ]} />
+      )}
+    </ChartFrame>
+  );
+}
+
+/** Total capacity per group — answers "where is our space?". */
+export function CapacityByGroup({ ds, rows, schema, dimension }: {
+  ds: DatasetDef; rows: Row[]; schema: DerivedSchema; dimension: ColumnDef;
+}) {
+  const data = utilisationBy(rows, dimension, schema, 12)
+    .map(u => ({ key: u.key, value: u.capacity, count: u.rows.length, rows: u.rows }))
+    .sort((a, b) => b.value - a.value);
+
+  return (
+    <ChartFrame title={`Capacity by ${dimension.header}`} department={ds.department} height={240}
+      question={`Where is the most capacity held?`}
+      isEmpty={!data.length}>
+      {h => <CategoryChart height={h} data={data} valueFormat={formatInt} colorIndex={0} />}
+    </ChartFrame>
+  );
+}
+
+/** How many groups sit in each utilisation band. */
+export function BandStrip({ units }: { units: UtilisationRow[] }) {
+  const dist = bandDistribution(units);
+  if (!dist.length) return null;
+  return (
+    <div className="bands">
+      {dist.map(d => (
+        <div key={d.band} className="bandcard" data-tone={d.tone}>
+          <div className="bandcard__n">{formatInt(d.count)}</div>
+          <div className="bandcard__lb">{d.label}</div>
+          <div className="bandcard__meta">
+            {formatPct(d.share, 0)} · {formatCompactNum(d.capacity)} capacity
+          </div>
         </div>
       ))}
     </div>

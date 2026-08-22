@@ -213,3 +213,19 @@
 .insight[data-tone='signal'] { border-left-color: var(--warn); }
 .insight[data-tone='neg']    { border-left-color: var(--neg); }
 .insight[data-tone='pos']    { border-left-color: var(--pos); }
+
+/* ---------- Band distribution strip ---------- */
+.bands { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--s3); }
+.bandcard { border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--surface);
+  padding: var(--s4); box-shadow: var(--sh-sm); position: relative; overflow: hidden; }
+.bandcard::before { content: ''; position: absolute; inset: 0 0 auto 0; height: 3px; background: var(--line); }
+.bandcard[data-tone='pos']::before    { background: var(--pos); }
+.bandcard[data-tone='accent']::before { background: var(--accent); }
+.bandcard[data-tone='signal']::before { background: var(--warn); }
+.bandcard[data-tone='neg']::before    { background: var(--neg); }
+.bandcard__n { font-family: var(--font-num); font-size: var(--fs-xl); font-weight: 600;
+  letter-spacing: -.03em; color: var(--ink-900); }
+.bandcard__lb { font-size: var(--fs-micro); font-weight: 650; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--ink-400); margin-top: 2px; }
+.bandcard__meta { font-size: var(--fs-xs); color: var(--ink-600); margin-top: var(--s2);
+  font-family: var(--font-num); }

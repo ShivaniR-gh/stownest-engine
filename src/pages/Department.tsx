@@ -9,6 +9,8 @@ import { MetricGrid, SectionHeader } from '@/components/metrics/MetricCard';
 import { DatasetPanel } from '@/components/data/DatasetPanel';
 import { DrillDown } from '@/components/data/DrillDown';
 import { DepartmentCharts } from './DepartmentCharts';
+import { CapacityDashboard } from '@/components/metrics/CapacityDashboard';
+import { deriveKpis, deriveSchema } from '@/lib/analytics/deriveSchema';
 import { Button, ErrorState } from '@/components/primitives';
 import { useMetrics } from '@/lib/analytics/useMetrics';
 import { useDatasets } from '@/lib/data/useDataset';
@@ -58,6 +60,13 @@ export default function Department() {
   const activeDataset = getDataset(datasetIds[tab] ?? '');
   const busy = status === 'loading' || status === 'refreshing';
 
+  // Schema-derived analytics for the dataset in view. When it declares capacity
+  // and occupied roles, the full capacity dashboard replaces the legacy charts.
+  const activeRows = activeDataset ? scoped[activeDataset.id] ?? [] : [];
+  const schema = activeDataset ? deriveSchema(activeDataset, activeRows) : null;
+  const derivedKpis = activeDataset && schema
+    ? deriveKpis(activeDataset, activeRows, [], schema, 6) : [];
+
   return (
     <>
       <TopBar title={dept.label} crumb={[{ label: 'Workspace', to: '/' }]} />
@@ -73,18 +82,23 @@ export default function Department() {
             body={error?.message ?? 'The data service did not respond.'} onRetry={refresh} />
         ) : (
           <>
-            {metrics.length > 0 && (
+            {(metrics.length > 0 || derivedKpis.length > 0) && (
               <section className="section">
                 <SectionHeader title="Key figures" note={period.label} />
-                <MetricGrid metrics={metrics} compare={compare} onDrill={drill.openMetric} />
+                <MetricGrid metrics={[...metrics, ...derivedKpis]} compare={compare}
+                  onDrill={drill.openMetric} />
               </section>
             )}
 
-            <section className="section">
-              <SectionHeader title="Analysis" />
-              <DepartmentCharts department={dept.id}
-                ctx={{ rows: scoped, period, drill: (t, d, r) => drill.openRows(t, d, r) }} />
-            </section>
+            {activeDataset && schema?.hasUtilisation ? (
+              <CapacityDashboard ds={activeDataset} rows={activeRows} schema={schema} />
+            ) : (
+              <section className="section">
+                <SectionHeader title="Analysis" />
+                <DepartmentCharts department={dept.id}
+                  ctx={{ rows: scoped, period, drill: (t, d, r) => drill.openRows(t, d, r) }} />
+              </section>
+            )}
 
             {datasetIds.length > 0 && activeDataset && (
               <section className="section">

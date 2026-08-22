@@ -1,5 +1,5 @@
 /** Schema derivation must work from mapping alone, with no domain knowledge. */
-import { deriveSchema, deriveKpis, summariseBy, utilisationBy, insights, band } from '../src/lib/analytics/deriveSchema';
+import { deriveSchema, deriveKpis, summariseBy, utilisationBy, insights, band, bandDistribution, utilisationOverTime } from '../src/lib/analytics/deriveSchema';
 import type { DatasetDef, Row } from '../src/config/types';
 
 let f = 0;
@@ -107,10 +107,14 @@ console.log('\nSemantic roles unlock real metrics — generically');
   ck('available = capacity − occupied', avail.value === 60 * 10000 - (54 * 9500 + 6 * 3000), avail.value);
 
   console.log('\nUtilisation bands drive colour consistently');
-  ck('50% is low', band(50) === 'low');
-  ck('75% is healthy', band(75) === 'healthy');
-  ck('90% is high', band(90) === 'high');
-  ck('100% is full', band(100) === 'full');
+  ck('50% is low',        band(50) === 'low');
+  ck('75% is healthy',    band(75) === 'healthy');
+  ck('85% is moderate',   band(85) === 'moderate');
+  ck('95% is high',       band(95) === 'high');
+  ck('99% is critical',   band(99) === 'critical');
+  ck('red is reserved: 90% is NOT critical', band(90) !== 'critical');
+  ck('boundaries do not overlap',
+    band(59.9) === 'low' && band(60) === 'healthy' && band(79.9) === 'healthy' && band(80) === 'moderate');
 
   const byLoc = utilisationBy(rows, withRoles.columns[1], after);
   ck('utilisation computed per location', byLoc.length === 3, byLoc.map(x => [x.key, x.pct.toFixed(1)]));
@@ -125,6 +129,36 @@ console.log('\nSemantic roles unlock real metrics — generically');
   ck('insights never invent a percentage above 100',
     !ins.some(t => /(\d+(\.\d+)?)%/.test(t) && Number(RegExp.$1) > 100), ins);
   ck('no insights on an empty set', insights([], after).length === 0);
+}
+
+console.log('\nTrend and distribution');
+{
+  const withRoles = {
+    ...facility,
+    columns: facility.columns.map(c => ({
+      ...c,
+      role: c.key === 'warehouse' ? 'name' : c.key === 'location' ? 'location'
+        : c.key === 'month' ? 'date' : c.key === 'total_space' ? 'capacity'
+        : c.key === 'occupied_space' ? 'occupied' : c.key === 'status' ? 'status' : undefined,
+    })),
+  } as DatasetDef;
+  const sc = deriveSchema(withRoles, rows);
+
+  const pts = utilisationOverTime(rows, sc, r => {
+    const v = String(r.month);
+    return { key: v, label: v };
+  });
+  ck('one point per period', pts.length === 3, pts.map(p => p.label));
+  ck('every point has a utilisation', pts.every(p => p.pct > 0 && p.pct <= 100));
+  ck('available = capacity − occupied per point',
+    pts.every(p => Math.abs(p.available - (p.capacity - p.occupied)) < 0.01));
+  ck('trend is empty without roles', utilisationOverTime(rows, deriveSchema(facility, rows), () => null).length === 0);
+
+  const dist = bandDistribution(utilisationBy(rows, withRoles.columns[0], sc));
+  ck('distribution counts add to the group total',
+    dist.reduce((a, d) => a + d.count, 0) === utilisationBy(rows, withRoles.columns[0], sc).length, dist);
+  ck('shares sum to 100', Math.abs(dist.reduce((a, d) => a + d.share, 0) - 100) < 0.01);
+  ck('empty bands are omitted', dist.every(d => d.count > 0));
 }
 
 console.log(f === 0 ? '\nAll derivation checks passed.\n' : `\n${f} FAILED\n`);
