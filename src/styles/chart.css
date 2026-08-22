@@ -62,7 +62,7 @@
 .rank__nm { font-size: var(--fs-sm); color: var(--ink-900); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rank__meta { font-size: var(--fs-micro); color: var(--ink-400); }
 .rank__bar { height: 3px; background: var(--line-faint); border-radius: 2px; margin-top: 4px; overflow: hidden; }
-.rank__bar span { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--c5)); border-radius: 2px; }
+.rank__bar span { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-hover)); border-radius: 2px; }
 .rank__v { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-size: var(--fs-sm); font-weight: 550; text-align: right; }
 
 /* Heatmap */

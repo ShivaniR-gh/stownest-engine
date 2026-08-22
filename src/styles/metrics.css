@@ -20,17 +20,17 @@
 .metric:hover { box-shadow: var(--sh-md); transform: translateY(-1px); }
 
 /* Tone is derived from the metric, never chosen decoratively. */
-.metric[data-tone='pos']::before    { background: var(--mint); }
+.metric[data-tone='pos']::before    { background: var(--pos); }
 .metric[data-tone='neg']::before    { background: var(--neg); }
 .metric[data-tone='signal']::before { background: var(--signal); }
 .metric[data-tone='void']::before   { background: var(--line-strong); }
 
 /* The lead metric of a row gets the navy field: the number you read first. */
 .metric--lead {
-  background: linear-gradient(155deg, var(--accent), var(--accent-strong));
-  border-color: var(--accent-strong);
+  background: linear-gradient(155deg, var(--navy), var(--navy-strong));
+  border-color: var(--navy-strong);
 }
-.metric--lead::before { background: var(--mint); }
+.metric--lead::before { background: var(--accent); }
 .metric--lead .metric__label { color: rgba(255,255,255,.72); }
 .metric--lead .metric__value { color: #fff; }
 .metric--lead .metric__cmp   { color: rgba(255,255,255,.6); }
@@ -38,9 +38,9 @@
 .metric--lead .metric__fx:hover,
 .metric--lead .metric__fx[aria-expanded='true'] { background: rgba(255,255,255,.14); color: #fff; }
 .metric--lead .metric__icon  { background: rgba(255,255,255,.12); color: #fff; border-color: transparent; }
-.metric--lead .delta--pos    { color: #6fe7bd; }
-.metric--lead .delta--neg    { color: #ffa39c; }
-.metric--lead .metric__track { background: rgba(255,255,255,.18); }
+.metric--lead .delta--pos    { color: #5fd6a8; }
+.metric--lead .delta--neg    { color: #ff9b93; }
+.metric--lead .metric__track { background: rgba(255,255,255,.16); }
 
 .metric--clickable { cursor: pointer; }
 .metric--clickable:hover { border-color: var(--accent-line); }
@@ -51,7 +51,7 @@
   display: grid; place-items: center;
   background: var(--accent-soft); color: var(--accent); border: 1px solid var(--accent-line);
 }
-.metric[data-tone='pos'] .metric__icon    { background: var(--mint-soft); color: var(--mint); border-color: var(--mint-line); }
+.metric[data-tone='pos'] .metric__icon    { background: var(--pos-soft); color: var(--pos); border-color: var(--mint-line); }
 .metric[data-tone='neg'] .metric__icon    { background: var(--neg-soft); color: var(--neg); border-color: transparent; }
 .metric[data-tone='signal'] .metric__icon { background: var(--signal-soft); color: var(--signal); border-color: transparent; }
 .metric[data-tone='void'] .metric__icon   { background: var(--surface-sunk); color: var(--ink-400); border-color: var(--line); }
@@ -84,14 +84,15 @@
 
 /* Percentage metrics get a real progress track — meaningful, not decorative. */
 .metric__track {
-  width: 100%; height: 5px; border-radius: 3px; background: var(--surface-sunk);
-  margin-top: var(--s3); overflow: hidden;
+  width: 100%; height: 6px; border-radius: 3px; margin-top: var(--s3); overflow: hidden;
+  background: repeating-linear-gradient(90deg,
+    var(--line) 0 3px, transparent 3px 7px);
 }
 .metric__track span { display: block; height: 100%; border-radius: 3px; background: var(--accent); transition: width var(--t-med); }
-.metric[data-tone='pos'] .metric__track span    { background: var(--mint); }
+.metric[data-tone='pos'] .metric__track span    { background: var(--pos); }
 .metric[data-tone='neg'] .metric__track span    { background: var(--neg); }
 .metric[data-tone='signal'] .metric__track span { background: var(--signal); }
-.metric--lead .metric__track span { background: var(--mint); }
+.metric--lead .metric__track span { background: var(--accent); }
 
 .delta {
   display: inline-flex; align-items: center; gap: 3px; padding: 2px 7px; border-radius: 999px;

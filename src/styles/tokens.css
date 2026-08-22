@@ -6,62 +6,71 @@
    reading. Everything else is neutral so the data can hold the colour.
    ========================================================================== */
 :root {
-  /* Surfaces — bright, spacious, faintly cool */
-  --canvas:         #f5f7fa;
-  --canvas-tint:    #eef2f7;
+  /* Surfaces — warm light canvas, pure white cards */
+  --canvas:         #f4f1f1;
+  --canvas-tint:    #efebeb;
   --surface:        #ffffff;
-  --surface-sunk:   #f7f9fc;
+  --surface-sunk:   #f8f6f6;
   --surface-raised: #ffffff;
-  --overlay:        rgba(11, 22, 44, 0.42);
+  --overlay:        rgba(20, 33, 61, 0.44);
 
   /* Ink */
-  --ink-900: #0f1b33;
-  --ink-700: #33415c;
-  --ink-600: #5a6883;
-  --ink-400: #8492ac;
-  --ink-300: #a9b4c8;
+  --ink-900: #14213d;
+  --ink-700: #3a4560;
+  --ink-600: #626c85;
+  --ink-400: #8d95a8;
+  --ink-300: #b3b9c6;
 
   /* Structure */
-  --line:        #e3e9f2;
-  --line-strong: #cdd6e4;
-  --line-faint:  #eef2f8;
+  --line:        #e7e4e6;
+  --line-strong: #d3cfd3;
+  --line-faint:  #f0eded;
 
-  /* Primary — deep navy */
-  --accent:        #14336b;
-  --accent-hover:  #0e2650;
-  --accent-strong: #0a1c3d;
-  --accent-soft:   #e8eef9;
-  --accent-line:   #c2d0e8;
+  /* Structure and navigation — deep navy */
+  --navy:          #14213d;
+  --navy-strong:   #0d162b;
   --accent-ink:    #ffffff;
 
-  /* Secondary — mint. Health, positive movement, active state. */
-  --mint:        #0d9f6e;
-  --mint-hover:  #0b8a5f;
-  --mint-soft:   #e3f6ef;
-  --mint-line:   #b6e5d3;
+  /* Brand accent — orange. Carries data emphasis, active state, primary action.
+     Because orange now reads as "ours", it can no longer double as a warning:
+     attention states use red below, so an alert is never mistaken for branding. */
+  --accent:        #f26b21;
+  --accent-hover:  #dd5a13;
+  --accent-strong: #c14a0c;
+  --accent-soft:   #fdeee4;
+  --accent-line:   #f8cfb4;
+
+  /* Kept as an alias so existing rules resolve; mint is now a chart hue only. */
+  --mint:        #17a673;
+  --mint-hover:  #128c60;
+  --mint-soft:   #e4f6ef;
+  --mint-line:   #b7e6d4;
 
   /* Semantic */
-  --pos:      #0d9f6e;
-  --pos-soft: #e3f6ef;
-  --neg:      #c0392f;
-  --neg-soft: #fdecea;
-  --signal:      #b45309;   /* attention only */
-  --signal-soft: #fdf2e3;
-  --info:      #14336b;
-  --info-soft: #e8eef9;
-  --idle:      #5a6883;
-  --idle-soft: #eef2f8;
+  --pos:      #17a673;
+  --pos-soft: #e4f6ef;
+  /* Attention is a DEEP crimson, not a bright red: bright red sits too close to
+     the brand orange to be told apart at a glance, which would make an alert
+     look like branding. Verified by contrast audit, not by eye. */
+  --neg:      #a81f16;
+  --neg-soft: #fbe9e7;
+  --signal:      #a81f16;
+  --signal-soft: #fbe9e7;
+  --info:      #14213d;
+  --info-soft: #e9ebf0;
+  --idle:      #626c85;
+  --idle-soft: #f0eded;
 
   /* Categorical series — harmonised, navy-and-mint led, no rainbow */
-  --c1: #14336b;  /* navy      */
-  --c2: #0d9f6e;  /* mint      */
-  --c3: #b45309;  /* amber     */
-  --c4: #9d3f60;  /* rose      */
-  --c5: #4a6a9c;  /* steel     */
-  --c6: #6b5b95;  /* violet    */
-  --c7: #17798a;  /* teal      */
-  --c8: #8a6a4a;  /* clay      */
-  --grid: #edf1f7;
+  --c1: #f26b21;  /* orange — the lead series      */
+  --c2: #14213d;  /* navy                          */
+  --c3: #17a673;  /* green                         */
+  --c4: #4a6a9c;  /* steel                         */
+  --c5: #a81f16;  /* crimson                       */
+  --c6: #6b5b95;  /* violet                        */
+  --c7: #17798a;  /* teal                          */
+  --c8: #a9713f;  /* clay                          */
+  --grid: #eeeaea;
 
   /* Type */
   --font-ui: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -81,20 +90,20 @@
   --s1: 4px;  --s2: 8px;  --s3: 12px; --s4: 16px;
   --s5: 20px; --s6: 24px; --s7: 32px; --s8: 40px; --s9: 56px;
 
-  --r-sm: 5px; --r-md: 8px; --r-lg: 12px; --r-xl: 16px;
+  --r-sm: 6px; --r-md: 10px; --r-lg: 16px; --r-xl: 20px;
 
   /* Shadows — soft, low, never dramatic */
-  --sh-sm: 0 1px 2px rgba(15, 27, 51, .05);
-  --sh-md: 0 1px 3px rgba(15, 27, 51, .06), 0 4px 12px rgba(15, 27, 51, .05);
-  --pop:   0 2px 6px rgba(15, 27, 51, .08), 0 12px 32px rgba(15, 27, 51, .12);
+  --sh-sm: 0 1px 2px rgba(20, 33, 61, .04);
+  --sh-md: 0 2px 4px rgba(20, 33, 61, .05), 0 8px 20px rgba(20, 33, 61, .05);
+  --pop:   0 4px 10px rgba(20, 33, 61, .08), 0 16px 40px rgba(20, 33, 61, .14);
 
   /* Dark navigation rail against a light canvas — the main hierarchy device */
-  --rail-bg:     #0c1a33;
-  --rail-bg-alt: #142845;
-  --rail-ink:    #dbe4f2;
-  --rail-ink-dim:#8ea2c0;
-  --rail-line:   #1d3355;
-  --rail-active: #16325e;
+  --rail-bg:     #14213d;
+  --rail-bg-alt: #1d2c4d;
+  --rail-ink:    #e6e8ee;
+  --rail-ink-dim:#939bb0;
+  --rail-line:   #22314f;
+  --rail-active: #23345c;
 
   --rail-w: 244px;
   --rail-w-collapsed: 60px;
@@ -106,11 +115,11 @@
 }
 
 [data-theme='dark'] {
-  --canvas:         #0a1526;
-  --canvas-tint:    #0d1b30;
-  --surface:        #101f36;
-  --surface-sunk:   #0d1a2e;
-  --surface-raised: #16283f;
+  --canvas:         #0b1120;
+  --canvas-tint:    #0e1526;
+  --surface:        #141d33;
+  --surface-sunk:   #101829;
+  --surface-raised: #1a2440;
   --overlay:        rgba(3, 8, 17, .68);
 
   --ink-900: #e8eef8;
@@ -123,36 +132,38 @@
   --line-strong: #2b405e;
   --line-faint:  #17273e;
 
-  --accent:        #6f9ae8;
-  --accent-hover:  #86abee;
-  --accent-strong: #a8c4f3;
-  --accent-soft:   #16294a;
-  --accent-line:   #29416b;
-  --accent-ink:    #08131f;
+  --navy:          #0b1120;
+  --navy-strong:   #060b16;
+  --accent:        #f9813c;
+  --accent-hover:  #fb9459;
+  --accent-strong: #fda06a;
+  --accent-soft:   #33200f;
+  --accent-line:   #5a3417;
+  --accent-ink:    #1b0d03;
 
-  --mint:       #34d3a0;
-  --mint-hover: #4fdcae;
-  --mint-soft:  #102f28;
-  --mint-line:  #1d5344;
+  --mint:       #35c99a;
+  --mint-hover: #4fd6ab;
+  --mint-soft:  #0f2c25;
+  --mint-line:  #1c5042;
 
-  --pos: #34d3a0; --pos-soft: #102f28;
-  --neg: #ef7f78; --neg-soft: #331a1b;
-  --signal: #e0a052; --signal-soft: #302213;
-  --info: #6f9ae8; --info-soft: #16294a;
-  --idle: #94a3bd; --idle-soft: #17273e;
+  --pos: #35c99a; --pos-soft: #0f2c25;
+  --neg: #ff6b73; --neg-soft: #3a1418;
+  --signal: #ff6b73; --signal-soft: #3a1418;
+  --info: #8fa8d8; --info-soft: #18213a;
+  --idle: #94a0bd; --idle-soft: #161f36;
 
-  --c1: #6f9ae8; --c2: #34d3a0; --c3: #e0a052; --c4: #d98098;
-  --c5: #8aa6cf; --c6: #a396d4; --c7: #58bccf; --c8: #c0a184;
-  --grid: #1b2b43;
+  --c1: #f9813c; --c2: #8fa8d8; --c3: #35c99a; --c4: #7b93c4;
+  --c5: #ff6b73; --c6: #a396d4; --c7: #58bccf; --c8: #c79a6d;
+  --grid: #1a2338;
 
   --sh-sm: 0 1px 2px rgba(0,0,0,.3);
   --sh-md: 0 1px 3px rgba(0,0,0,.35), 0 4px 14px rgba(0,0,0,.3);
   --pop:   0 2px 8px rgba(0,0,0,.45), 0 16px 40px rgba(0,0,0,.5);
 
-  --rail-bg:     #08121f;
-  --rail-bg-alt: #0e1d31;
-  --rail-ink:    #dbe4f2;
-  --rail-ink-dim:#7d8ea9;
-  --rail-line:   #172740;
-  --rail-active: #16294a;
+  --rail-bg:     #080d18;
+  --rail-bg-alt: #111a2e;
+  --rail-ink:    #e6e8ee;
+  --rail-ink-dim:#7d879e;
+  --rail-line:   #172034;
+  --rail-active: #1c2740;
 }

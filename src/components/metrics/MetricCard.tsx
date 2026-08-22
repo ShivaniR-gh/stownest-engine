@@ -79,7 +79,7 @@ export function MetricCard({
           </div>
           {spark && spark.length > 1 && (
             <Sparkline values={spark}
-              tone={m.deltaTone === 'neg' ? 'var(--neg)' : m.deltaTone === 'pos' ? 'var(--mint)' : 'var(--ink-400)'} />
+              tone={m.deltaTone === 'neg' ? 'var(--neg)' : m.deltaTone === 'pos' ? 'var(--pos)' : 'var(--ink-400)'} />
           )}
           {pct !== null && (
             <span className="metric__track" aria-hidden="true"><span style={{ width: `${pct}%` }} /></span>

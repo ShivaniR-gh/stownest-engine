@@ -36,8 +36,12 @@
 .badge::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
 .badge--bare::before { display: none; }
 .badge--pos { background: var(--pos-soft); color: var(--pos); border-color: var(--mint-line); }
-.badge--neg { background: var(--neg-soft); color: var(--neg); }
-.badge--signal { background: var(--signal-soft); color: var(--signal); }
+/* Filled, not tinted. On a dark field orange and red are both warm and light,
+   so shape and fill carry the distinction that hue alone cannot. */
+.badge--signal { background: var(--signal); color: #fff; border-color: var(--signal); }
+.badge--signal::before { background: #fff; }
+.badge--neg { background: var(--neg); color: #fff; border-color: var(--neg); }
+.badge--neg::before { background: #fff; }
 .badge--idle { background: var(--idle-soft); color: var(--idle); }
 .badge--accent { background: var(--accent-soft); color: var(--accent); border-color: var(--accent-line); }
 
