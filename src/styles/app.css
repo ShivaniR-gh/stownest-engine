@@ -113,3 +113,20 @@
 .present .card__title { font-size: var(--fs-base); }
 .present .card__sub { font-size: var(--fs-sm); }
 .present .grid { gap: var(--s5); }
+
+/* ---------- Presentation analytics ---------- */
+.pres__hd { display: flex; align-items: flex-end; gap: var(--s4); flex-wrap: wrap; margin-bottom: var(--s6); }
+.pres__title { font-size: 28px; font-weight: 600; letter-spacing: -.02em; }
+.pres__sub { font-size: var(--fs-sm); color: var(--ink-600); margin-top: 4px; max-width: 620px; }
+.pres__ds { display: flex; gap: 4px; flex-wrap: wrap; }
+
+.sumgrid { display: grid; gap: var(--s3); grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); }
+.sumcard { border: 1px solid var(--line); border-radius: var(--r-lg); padding: var(--s4); background: var(--surface); }
+.sumcard__hd { display: flex; align-items: baseline; gap: var(--s2); margin-bottom: var(--s3); }
+.sumcard__nm { font-size: var(--fs-sm); font-weight: 620; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sumcard__n { margin-left: auto; font-size: var(--fs-xs); color: var(--ink-400); }
+.sumcard__row { display: flex; justify-content: space-between; gap: var(--s3); padding: 5px 0;
+  border-top: 1px solid var(--line-faint); font-size: var(--fs-xs); color: var(--ink-600); }
+.sumcard__row b { font-family: var(--font-num); font-variant-numeric: tabular-nums; color: var(--ink-900); font-weight: 600; }
+.sumcard__bar { height: 4px; background: var(--line-faint); border-radius: 2px; margin-top: var(--s3); overflow: hidden; }
+.sumcard__bar span { display: block; height: 100%; background: var(--accent); border-radius: 2px; }

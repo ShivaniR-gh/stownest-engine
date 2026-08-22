@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { TopBar } from '@/components/shell/TopBar';
 import { ControlBar } from '@/components/filters/ControlBar';
 import { MetricGrid, SectionHeader } from '@/components/metrics/MetricCard';
@@ -7,7 +7,7 @@ import { TrendChart } from '@/components/charts/TrendChart';
 import { CategoryChart } from '@/components/charts/CategoryChart';
 import { Heatmap } from '@/components/charts/Heatmap';
 import { DrillDown } from '@/components/data/DrillDown';
-import { Button, Icon, Popover } from '@/components/primitives';
+import { Button, EmptyState, Icon, Popover } from '@/components/primitives';
 import { useMetrics } from '@/lib/analytics/useMetrics';
 import { useDatasets } from '@/lib/data/useDataset';
 import { useAnalytics } from '@/lib/analytics/AnalyticsContext';
@@ -20,7 +20,8 @@ import { usePermission } from '@/lib/permissions/usePermission';
 import { visibleDatasetIds, visibleMetricIds } from '@/lib/permissions/scope';
 
 const BUSINESS = ['fin.revenue', 'fin.collections', 'fin.profit', 'fin.margin', 'cust.arpu', 'cust.retention'];
-const ALL_DATA = ['invoices', 'expenses', 'leads', 'jobs', 'customers', 'space', 'tasks'];
+// No seed list: datasets come from the registry, scoped to what this account
+// may read. A hardcoded list silently excludes every connected department.
 
 /**
  * Free-form business review.
@@ -61,27 +62,34 @@ export default function Analytics() {
   const { period, compare, filters } = useAnalytics();
   const { principal } = usePermission();
 
-  const DATA = useMemo(() => visibleDatasetIds(principal, ALL_DATA), [principal]);
+  const DATA = useMemo(() => visibleDatasetIds(principal), [principal]);
   const business = useMemo(() => visibleMetricIds(principal, BUSINESS), [principal]);
 
   const { metrics, fetchedAt, status, refresh } = useMetrics(business);
   const { byId } = useDatasets(DATA);
   const drill = useDrill();
 
-  const [datasetId, setDatasetId] = useState(() => DATA[0] ?? 'invoices');
+  const [datasetId, setDatasetId] = useState(() => DATA[0] ?? '');
+
+  // Keep the selection valid as the registry hydrates or permissions change.
+  useEffect(() => {
+    if (DATA.length && !DATA.includes(datasetId)) setDatasetId(DATA[0]);
+  }, [DATA, datasetId]);
   const [dimension, setDimension] = useState('city');
   const [measureKey, setMeasureKey] = useState('amount');
   const [agg, setAgg] = useState<'sum' | 'count' | 'avg'>('sum');
   const [split, setSplit] = useState<string>('revenue_line');
 
-  const dataset = getDataset(datasetId)!;
+  // No non-null assertion: an unreadable or not-yet-hydrated dataset must render
+  // an empty state, never crash the page.
+  const dataset = getDataset(datasetId);
   const rows = useMemo(() => {
     const ds = getDataset(datasetId);
     return ds ? applyFilters(applyPeriod(byId[datasetId] ?? [], ds, period), filters, ds) : [];
   }, [byId, datasetId, period, filters]);
 
-  const dimensions = dataset.columns.filter(c => c.sheetColumn && c.groupable);
-  const measures = dataset.columns.filter(c => c.sheetColumn && (c.type === 'currency' || c.type === 'number'));
+  const dimensions = dataset?.columns.filter(c => c.sheetColumn && c.groupable) ?? [];
+  const measures = dataset?.columns.filter(c => c.sheetColumn && (c.type === 'currency' || c.type === 'number')) ?? [];
 
   const measureLabel = measures.find(m => m.key === measureKey)?.header ?? 'Records';
   const isMoney = measures.find(m => m.key === measureKey)?.type === 'currency';
@@ -91,9 +99,9 @@ export default function Analytics() {
     () => groupBy(rows, dimension, { agg, measure: measureKey }),
     [rows, dimension, agg, measureKey]);
 
-  const trend = useMemo(() => dataset.dateColumn
+  const trend = useMemo(() => dataset?.dateColumn
     ? timeSeries(rows, dataset.dateColumn, period, [{ id: 'v', agg, measure: measureKey }])
-    : [], [rows, dataset.dateColumn, period, agg, measureKey]);
+    : [], [rows, dataset?.dateColumn, period, agg, measureKey]);
 
   const heat = useMemo(
     () => crosstab(rows, dimension, split, { agg, measure: measureKey }),
@@ -106,6 +114,13 @@ export default function Analytics() {
         busy={status === 'loading' || status === 'refreshing'} onRefresh={refresh} />
 
       <div className="page">
+        {!DATA.length || !dataset ? (
+          <div className="card">
+            <EmptyState icon="layers" title="No data to review"
+              body="No dataset is connected for the departments you can access. Connect a Google Sheet under Administration → Data sources." />
+          </div>
+        ) : (
+        <>
         {metrics.length > 0 && (
           <section className="section">
             <SectionHeader title="Company position" note={period.label} />
@@ -122,7 +137,8 @@ export default function Analytics() {
                 options={allDatasets().filter(d => DATA.includes(d.id)).map(d => ({ key: d.id, label: d.label }))}
                 onChange={id => {
                   setDatasetId(id);
-                  const ds = getDataset(id)!;
+                  const ds = getDataset(id);
+                  if (!ds) return;
                   setDimension(ds.columns.find(c => c.sheetColumn && c.groupable)?.key ?? '');
                   const m = ds.columns.find(c => c.sheetColumn && (c.type === 'currency' || c.type === 'number'));
                   setMeasureKey(m?.key ?? '');
@@ -186,6 +202,8 @@ export default function Analytics() {
             </div>
           )}
         </section>
+        </>
+        )}
       </div>
 
       {drill.target && getDataset(drill.target.datasetId) && (

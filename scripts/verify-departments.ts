@@ -55,5 +55,46 @@ ck('typo dropped', !typo.departments.includes('facilty'), typo.departments);
 ck('valid id kept', typo.departments.includes('sales'));
 ck('no access via the typo', !can(typo, 'VIEW', 'facilty'));
 
+console.log('\nTeam access determines VIEW; role determines actions');
+{
+  // Several datasets across two departments, as a real deployment would have.
+  const DATASETS = [
+    { id: 'sales_leads',      department: 'sales' },
+    { id: 'sales_enquiries',  department: 'sales' },
+    { id: 'sales_visits',     department: 'sales' },
+    { id: 'facility_space',   department: 'facility' },
+    { id: 'facility_expense', department: 'facility' },
+    { id: 'logistics_jobs',   department: 'logistics' },
+  ];
+  const viewable = (p: unknown) => DATASETS.filter(d => can(p as never, 'VIEW', d.department)).map(d => d.id);
+
+  const salesEmp   = mk('employee', 'sales');
+  const salesAdmin = mk('department_admin', 'sales');
+  const both       = mk('employee', 'sales,facility');
+  const superA     = mk('super_admin', '');
+
+  ck('sales employee sees ALL three sales datasets',
+    viewable(salesEmp).join(',') === 'sales_leads,sales_enquiries,sales_visits', viewable(salesEmp));
+  ck('sales employee sees NO facility or logistics data',
+    !viewable(salesEmp).some(id => id.startsWith('facility') || id.startsWith('logistics')));
+  ck('employee and admin see IDENTICAL datasets',
+    viewable(salesEmp).join(',') === viewable(salesAdmin).join(','), {
+      employee: viewable(salesEmp), admin: viewable(salesAdmin) });
+  ck('multi-team user sees both teams in full',
+    viewable(both).join(',') === 'sales_leads,sales_enquiries,sales_visits,facility_space,facility_expense',
+    viewable(both));
+  ck('multi-team user still excluded from logistics', !viewable(both).includes('logistics_jobs'));
+  ck('super admin sees everything', viewable(superA).length === DATASETS.length);
+
+  // Role changes actions, never visibility.
+  ck('employee VIEW == admin VIEW on the same department',
+    can(salesEmp, 'VIEW', 'sales') === can(salesAdmin, 'VIEW', 'sales'));
+  ck('but employee cannot DELETE where admin can',
+    !can(salesEmp, 'DELETE', 'sales') && can(salesAdmin, 'DELETE', 'sales'));
+  ck('a new dataset in an authorised department is visible with no extra grant',
+    can(salesEmp, 'VIEW', 'sales'));
+  ck('VIEW without a department is refused', !can(salesEmp, 'VIEW'));
+}
+
 console.log(f === 0 ? '\nAll runtime-department checks passed.\n' : `\n${f} FAILED\n`);
 process.exit(f ? 1 : 0);

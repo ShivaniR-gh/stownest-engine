@@ -6,7 +6,8 @@ import { DataTable } from './DataTable';
 import { RecordForm } from './RecordForm';
 import { createRow, deleteRow, updateRow } from '@/lib/data/store';
 import { useScopedRows } from '@/lib/analytics/useMetrics';
-import { applySearch } from '@/lib/analytics/filters';
+import { applySearch, describePeriod } from '@/lib/analytics/filters';
+import { useAnalytics } from '@/lib/analytics/AnalyticsContext';
 import { exportRows } from '@/lib/export';
 import { usePermission } from '@/lib/permissions/usePermission';
 import { Gate } from '@/lib/permissions/Gate';
@@ -21,7 +22,12 @@ import { Gate } from '@/lib/permissions/Gate';
 export function DatasetPanel({ dataset, prefilter }: { dataset: DatasetDef; prefilter?: (r: Row) => boolean }) {
   const nav = useNavigate();
   const { can } = usePermission();
-  const { rows, status, error } = useScopedRows(dataset.id);
+  const { rows, all, status, error } = useScopedRows(dataset.id);
+  const { period } = useAnalytics();
+
+  // Explains an empty table rather than blaming the date range: a mis-mapped
+  // date column is otherwise indistinguishable from an empty sheet.
+  const diag = useMemo(() => describePeriod(all, dataset, period), [all, dataset, period]);
 
   const [q, setQ] = useState('');
   const [editing, setEditing] = useState<Row | null | undefined>(undefined);
@@ -64,6 +70,7 @@ export function DatasetPanel({ dataset, prefilter }: { dataset: DatasetDef; pref
         rows={view}
         status={status}
         error={error}
+        emptyBody={diag.emptyReason ?? undefined}
         onSelectionChange={setSelection}
         onRowClick={r => nav(`/d/${dept}/${dataset.id}/${encodeURIComponent(String(r.__id))}`)}
         toolbarLeft={

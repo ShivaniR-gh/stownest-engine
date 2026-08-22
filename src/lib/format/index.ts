@@ -41,6 +41,48 @@ export function formatMetric(v: number, f: MetricFormat): string {
 }
 
 /* --------------------------------- dates -------------------------------- */
+const MONTHS: Record<string, number> = {
+  jan: 0, january: 0, feb: 1, february: 1, mar: 2, march: 2, apr: 3, april: 3,
+  may: 4, jun: 5, june: 5, jul: 6, july: 6, aug: 7, august: 7,
+  sep: 8, sept: 8, september: 8, oct: 9, october: 9, nov: 10, november: 10, dec: 11, december: 11,
+};
+
+/**
+ * Month-granularity values, which operational sheets use constantly:
+ *   Jan 2026 · January 2026 · 2026-01 · 01/2026 · Jan-26
+ * Resolves to the first of that month so period filtering works normally.
+ */
+function parseMonth(s: string): Date | null {
+  const t = s.trim();
+
+  // 2026-01 or 2026/01
+  let m = t.match(/^(\d{4})[-/](\d{1,2})$/);
+  if (m && +m[2] >= 1 && +m[2] <= 12) return new Date(+m[1], +m[2] - 1, 1);
+
+  // "Jan 2026", "January 2026", "Jan-2026", "Jan 26"
+  m = t.match(/^([A-Za-z]{3,9})[\s\-,]+(\d{2,4})$/);
+  if (m) {
+    const mo = MONTHS[m[1].toLowerCase()];
+    if (mo !== undefined) {
+      const y = m[2].length === 2 ? 2000 + Number(m[2]) : Number(m[2]);
+      return new Date(y, mo, 1);
+    }
+  }
+
+  // "2026 Jan"
+  m = t.match(/^(\d{4})[\s\-,]+([A-Za-z]{3,9})$/);
+  if (m) {
+    const mo = MONTHS[m[2].toLowerCase()];
+    if (mo !== undefined) return new Date(+m[1], mo, 1);
+  }
+
+  // 01/2026
+  m = t.match(/^(\d{1,2})[/-](\d{4})$/);
+  if (m && +m[1] >= 1 && +m[1] <= 12) return new Date(+m[2], +m[1] - 1, 1);
+
+  return null;
+}
+
 export function parseDate(v: unknown): Date | null {
   if (v instanceof Date) return Number.isNaN(v.getTime()) ? null : v;
   if (typeof v === 'number') {
@@ -57,6 +99,11 @@ export function parseDate(v: unknown): Date | null {
     const d = new Date(+m[3], +m[2] - 1, +m[1]);
     return Number.isNaN(d.getTime()) ? null : d;
   }
+  // Month-granularity before Date.parse: "Jan 2026" would otherwise be read as
+  // 1 January in some engines and rejected in others.
+  const month = parseMonth(s);
+  if (month) return month;
+
   const t = Date.parse(s);
   return Number.isNaN(t) ? null : new Date(t);
 }

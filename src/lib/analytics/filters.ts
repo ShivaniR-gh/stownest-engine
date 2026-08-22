@@ -1,5 +1,6 @@
 import type { DatasetDef, Row } from '@/config/types';
 import { inPeriod, type Period } from './period';
+import { parseDate } from '@/lib/format';
 
 export type FilterMap = Record<string, string[]>;
 
@@ -25,8 +26,56 @@ export function applyFilters(rows: Row[], filters: FilterMap, ds: DatasetDef): R
 }
 
 export function applyPeriod(rows: Row[], ds: DatasetDef, period: Period): Row[] {
+  // All time keeps everything, including rows whose date cannot be read.
   if (!ds.dateColumn || !period.from) return rows;
   return rows.filter(r => inPeriod(r[ds.dateColumn!], period));
+}
+
+export interface PeriodDiagnostics {
+  total: number;
+  readable: number;
+  unreadable: number;
+  inPeriod: number;
+  dateColumnHeader: string | null;
+  /** Plain-English reason the table is empty, or null when it is not. */
+  emptyReason: string | null;
+}
+
+/**
+ * Explains an empty table instead of blaming the date range.
+ *
+ * A row whose date cannot be parsed is excluded from a period — it has to be —
+ * but staying silent about it makes a mis-mapped date column look like an empty
+ * sheet. This reports exactly how many rows exist and why none are showing.
+ */
+export function describePeriod(all: Row[], ds: DatasetDef, period: Period): PeriodDiagnostics {
+  const col = ds.dateColumn ? ds.columns.find(c => c.key === ds.dateColumn) : undefined;
+  const header = col?.header ?? ds.dateColumn ?? null;
+
+  if (!ds.dateColumn || !period.from) {
+    return { total: all.length, readable: all.length, unreadable: 0, inPeriod: all.length,
+      dateColumnHeader: header, emptyReason: all.length ? null : 'This sheet has no rows yet.' };
+  }
+
+  let readable = 0, within = 0;
+  for (const r of all) {
+    const d = parseDate(r[ds.dateColumn]);
+    if (!d) continue;
+    readable++;
+    if (inPeriod(d, period)) within++;
+  }
+  const unreadable = all.length - readable;
+
+  let emptyReason: string | null = null;
+  if (within === 0 && all.length > 0) {
+    emptyReason = unreadable === all.length
+      ? `${all.length} rows exist, but none have a date StowNest could read from “${header}”. Check that column, or set the dataset's date column to None.`
+      : unreadable > 0
+        ? `${all.length} rows exist. ${within} fall inside this period, and ${unreadable} have a date StowNest could not read from “${header}”.`
+        : `${all.length} rows exist, but none fall inside this period. Try All time.`;
+  }
+
+  return { total: all.length, readable, unreadable, inPeriod: within, dateColumnHeader: header, emptyReason };
 }
 
 export function applySearch(rows: Row[], q: string, ds: DatasetDef): Row[] {

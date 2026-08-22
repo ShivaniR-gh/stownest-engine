@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { Button, Icon, Popover, Tooltip } from '@/components/primitives';
 import { useAnalytics } from '@/lib/analytics/AnalyticsContext';
 import { PRESETS, periodLabel, periodToISO } from '@/lib/analytics/period';
-import { GLOBAL_FILTER_KEYS, optionsFor } from '@/lib/analytics/filters';
+import { optionsFor } from '@/lib/analytics/filters';
 import { getDataset } from '@/config/datasets';
 import { getEntry, isStale, refreshAll } from '@/lib/data/store';
 import { relativeTime } from '@/lib/format';
@@ -114,17 +114,29 @@ function FilterControl({ datasetIds }: { datasetIds: string[] }) {
   const a = useAnalytics();
   const [openKey, setOpenKey] = useState<string | null>(null);
 
-  /** Only offer dimensions that actually exist in the datasets on this screen —
-   *  a Vendor filter on the Finance page would silently do nothing. */
+  /**
+   * Filters come from the connected datasets themselves, not a fixed list of
+   * column names. A sheet with "Operational Status" gets a filter for it; a
+   * fixed allowlist would silently offer nothing.
+   */
   const dims = useMemo(() => {
-    const out: { key: string; label: string }[] = [];
-    for (const k of GLOBAL_FILTER_KEYS) {
-      for (const id of datasetIds) {
-        const col = getDataset(id)?.columns.find(c => c.key === k && c.sheetColumn && c.filterable);
-        if (col) { out.push({ key: k, label: col.header }); break; }
+    const seen = new Map<string, string>();
+    for (const id of datasetIds) {
+      const ds = getDataset(id);
+      if (!ds) continue;
+      for (const c of ds.columns) {
+        if (!c.sheetColumn || seen.has(c.key)) continue;
+        // Categorical and low-noise: explicitly filterable, an enum, or the
+        // dataset's own status column. Free text is deliberately excluded.
+        const usable = c.filterable || c.groupable || c.type === 'enum' || c.key === ds.statusColumn;
+        if (!usable) continue;
+        // Only offer it if the loaded rows actually hold a sensible number of
+        // distinct values — a 400-option dropdown is not a filter.
+        const values = optionsFor(getEntry(id).rows, c.key, 41);
+        if (values.length > 1 && values.length <= 40) seen.set(c.key, c.header);
       }
     }
-    return out;
+    return [...seen].map(([key, label]) => ({ key, label }));
   }, [datasetIds]);
 
   const optionsCache = useMemo(() => {
