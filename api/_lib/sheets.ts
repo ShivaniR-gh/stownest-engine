@@ -254,6 +254,49 @@ export async function ensureTab(spreadsheetId: string, title: string, headers: r
   }
 }
 
+/**
+ * Appends rows aligned to the tab's LIVE header row, adding any header the
+ * caller needs but the sheet lacks.
+ *
+ * Positional appends break silently the moment the schema gains a column: an
+ * existing tab keeps its old headers, and every value after the insertion point
+ * lands under the wrong one. Writing by name makes schema changes safe.
+ */
+export async function appendKeyedRows(
+  spreadsheetId: string,
+  tab: string,
+  expectedHeaders: readonly string[],
+  records: Record<string, string | number>[],
+): Promise<void> {
+  if (!records.length) return;
+
+  const existing = await readRange(spreadsheetId, `${tab}!1:1`);
+  let headers = (existing[0] ?? []).map(h => String(h ?? '').trim()).filter(Boolean);
+
+  // Extend the header row rather than reordering it: existing data stays put.
+  const missing = expectedHeaders.filter(h => !headers.some(x => x.toLowerCase() === h.toLowerCase()));
+  if (!headers.length) {
+    headers = [...expectedHeaders];
+    await call(spreadsheetId, `/values/${encodeURIComponent(`${tab}!A1`)}?valueInputOption=RAW`,
+      { method: 'PUT', body: JSON.stringify({ values: [headers] }) });
+  } else if (missing.length) {
+    headers = [...headers, ...missing];
+    await call(spreadsheetId, `/values/${encodeURIComponent(`${tab}!A1`)}?valueInputOption=RAW`,
+      { method: 'PUT', body: JSON.stringify({ values: [headers] }) });
+  }
+
+  const idx = new Map(headers.map((h, i) => [h.toLowerCase(), i]));
+  const rows = records.map(rec => {
+    const out: (string | number)[] = headers.map(() => '');
+    for (const [k, v] of Object.entries(rec)) {
+      const i = idx.get(k.toLowerCase());
+      if (i !== undefined) out[i] = v;
+    }
+    return out;
+  });
+  await appendRows(spreadsheetId, tab, rows);
+}
+
 export async function appendRows(spreadsheetId: string, tab: string, rows: (string | number)[][]): Promise<void> {
   if (!rows.length) return;
   await call(spreadsheetId,

@@ -3,7 +3,7 @@ import { authenticate } from '../_lib/auth';
 import { fail, ok } from '../_lib/respond';
 import { HttpError, required } from '../_lib/env';
 import {
-  appendRows, deleteRowsWhereFirstCol, ensureTab, listTabs, parseSpreadsheetId,
+  appendKeyedRows, deleteRowsWhereFirstCol, ensureTab, listTabs, parseSpreadsheetId,
   readRange, spreadsheetTitle, audit,
 } from '../_lib/sheets';
 import {
@@ -139,28 +139,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       await deleteRowsWhereFirstCol(control, SOURCES_TAB, datasetId);
       await deleteRowsWhereFirstCol(control, MAPPINGS_TAB, datasetId);
 
-      await appendRows(control, SOURCES_TAB, [[
-        datasetId, department,
-        String(body.label ?? datasetId), String(body.noun ?? 'record'),
-        spreadsheetId, tab,
-        idColumn, String(body.dateColumn ?? ''), String(body.statusColumn ?? ''),
-        String(body.titleColumn ?? idColumn),
-        'Connected', principal.email, new Date().toISOString(),
-      ]]);
+      await appendKeyedRows(control, SOURCES_TAB, SOURCES_HEADERS, [{
+        'Dataset ID': datasetId, 'Department': department,
+        'Label': String(body.label ?? datasetId), 'Noun': String(body.noun ?? 'record'),
+        'Spreadsheet ID': spreadsheetId, 'Tab Name': tab,
+        'ID Column': idColumn, 'Date Column': String(body.dateColumn ?? ''),
+        'Status Column': String(body.statusColumn ?? ''),
+        'Title Column': String(body.titleColumn ?? idColumn),
+        'Status': 'Connected', 'Connected By': principal.email,
+        'Connected At': new Date().toISOString(),
+      }]);
 
-      await appendRows(control, MAPPINGS_TAB, columns.map(c => [
-        datasetId,
-        String(c.sheetColumn ?? ''), String(c.key ?? ''), String(c.header ?? ''),
-        String(c.type ?? 'text'),
-        String(c.role ?? ''),
-        c.editable === false ? 'FALSE' : 'TRUE',
-        c.required ? 'TRUE' : 'FALSE',
-        c.filterable ? 'TRUE' : 'FALSE',
-        c.groupable ? 'TRUE' : 'FALSE',
-        String(c.aggregate ?? ''),
-        Array.isArray(c.enumValues) ? c.enumValues.join(',') : '',
-        c.hidden ? 'TRUE' : 'FALSE',
-      ]));
+      await appendKeyedRows(control, MAPPINGS_TAB, MAPPINGS_HEADERS, columns.map(c => ({
+        'Dataset ID': datasetId,
+        'Sheet Column': String(c.sheetColumn ?? ''),
+        'Key': String(c.key ?? ''),
+        'Header': String(c.header ?? ''),
+        'Type': String(c.type ?? 'text'),
+        'Role': String(c.role ?? ''),
+        'Editable': c.editable === false ? 'FALSE' : 'TRUE',
+        'Required': c.required ? 'TRUE' : 'FALSE',
+        'Filterable': c.filterable ? 'TRUE' : 'FALSE',
+        'Groupable': c.groupable ? 'TRUE' : 'FALSE',
+        'Aggregate': String(c.aggregate ?? ''),
+        'Enum Values': Array.isArray(c.enumValues) ? c.enumValues.join(',') : '',
+        'Hidden': c.hidden ? 'TRUE' : 'FALSE',
+      })));
 
       invalidateRegistry();
       await audit({ actor: principal.email, action: 'CONNECT_SOURCE', dataset: datasetId,

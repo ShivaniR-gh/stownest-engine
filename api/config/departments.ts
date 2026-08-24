@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { authenticate } from '../_lib/auth';
 import { fail, ok } from '../_lib/respond';
 import { HttpError, required } from '../_lib/env';
-import { appendRows, deleteRowsWhereFirstCol, ensureTab, readRange, audit } from '../_lib/sheets';
+import { appendKeyedRows, deleteRowsWhereFirstCol, ensureTab, readRange, audit } from '../_lib/sheets';
 import {
   DEPARTMENTS_HEADERS, DEPARTMENTS_TAB, ID_PATTERN,
   invalidateDepartments, loadDepartments,
@@ -55,8 +55,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       for (let r = rows.length - 1; r >= 1; r--) {
         await deleteRowsWhereFirstCol(control, DEPARTMENTS_TAB, String(rows[r]?.[0] ?? ''));
       }
-      await appendRows(control, DEPARTMENTS_TAB,
-        next.map(d => [d.id, d.label, d.purpose, d.icon, d.status, d.sortOrder]));
+      await appendKeyedRows(control, DEPARTMENTS_TAB, DEPARTMENTS_HEADERS,
+        next.map(d => ({
+          'ID': d.id, 'Label': d.label, 'Purpose': d.purpose,
+          'Icon': d.icon, 'Status': d.status, 'Sort Order': d.sortOrder,
+        })));
       invalidateDepartments();
     };
 
