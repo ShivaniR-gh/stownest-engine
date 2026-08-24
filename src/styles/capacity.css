@@ -1,0 +1,52 @@
+/* Band colours. Declared here so the trend line, bars, badges, table and
+   distribution all read the same source. Red is the top band only. */
+:root {
+  --band-healthy:  #10b981;
+  --band-normal:   #2563eb;
+  --band-moderate: #f59e0b;
+  --band-high:     #f97316;
+  --band-critical: #ef4444;
+}
+[data-theme='dark'] {
+  --band-healthy:  #10b981;
+  --band-normal:   #3b82f6;
+  --band-moderate: #f59e0b;
+  --band-high:     #f97316;
+  --band-critical: #ef4444;
+}
+
+.util__track[data-band='healthy'] span  { background: var(--band-healthy); }
+.util__track[data-band='normal'] span   { background: var(--band-normal); }
+.util__track[data-band='moderate'] span { background: var(--band-moderate); }
+.util__track[data-band='high'] span     { background: var(--band-high); }
+.util__track[data-band='critical'] span { background: var(--band-critical); }
+
+/* Band distribution strip */
+.bands { display: grid; gap: var(--s3); grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+.bandcard { border: 1px solid var(--line); border-radius: var(--r-lg); padding: var(--s4);
+  background: var(--surface); box-shadow: var(--sh-sm); position: relative; overflow: hidden; }
+.bandcard::before { content: ''; position: absolute; inset: 0 0 auto 0; height: 3px; }
+.bandcard[data-band='healthy']::before  { background: var(--band-healthy); }
+.bandcard[data-band='normal']::before   { background: var(--band-normal); }
+.bandcard[data-band='moderate']::before { background: var(--band-moderate); }
+.bandcard[data-band='high']::before     { background: var(--band-high); }
+.bandcard[data-band='critical']::before { background: var(--band-critical); }
+.bandcard__n { font-family: var(--font-num); font-variant-numeric: tabular-nums;
+  font-size: var(--fs-xl); font-weight: 600; letter-spacing: -.02em; color: var(--ink-900); }
+.bandcard__lb { font-size: var(--fs-micro); font-weight: 650; letter-spacing: .05em;
+  text-transform: uppercase; color: var(--ink-400); margin-bottom: 6px; }
+.bandcard__meta { font-size: var(--fs-xs); color: var(--ink-600); margin-top: 4px; }
+
+/* Capacity table — presentation only; CRUD stays in the records table below. */
+.captbl { width: 100%; font-size: var(--fs-sm); }
+.captbl thead th { text-align: left; font-size: var(--fs-micro); font-weight: 650;
+  letter-spacing: .06em; text-transform: uppercase; color: var(--ink-400);
+  padding: 0 var(--s4); height: 40px; border-bottom: 2px solid var(--line); white-space: nowrap; }
+.captbl thead th.is-num { text-align: right; }
+.captbl tbody td { padding: 0 var(--s4); height: 44px; border-bottom: 1px solid var(--line-faint);
+  color: var(--ink-700); white-space: nowrap; }
+.captbl tbody td.is-num { text-align: right; font-family: var(--font-num);
+  font-variant-numeric: tabular-nums; color: var(--ink-900); }
+.captbl tbody td.is-key { color: var(--ink-900); font-weight: 620; }
+.captbl tbody tr:hover { background: var(--accent-soft); }
+.captbl tbody tr:last-child td { border-bottom: 0; }
