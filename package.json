@@ -16,7 +16,8 @@
     "e2e": "esbuild scripts/e2e.ts --bundle --platform=node --format=cjs --outfile=node_modules/.cache/e2e.cjs --log-level=error --external:google-auth-library && node node_modules/.cache/e2e.cjs",
     "verify:departments": "esbuild scripts/verify-departments.ts --bundle --platform=node --format=cjs --outfile=node_modules/.cache/vd.cjs --log-level=error --external:google-auth-library && node node_modules/.cache/vd.cjs",
     "verify:dates": "esbuild scripts/verify-dates.ts --bundle --platform=node --format=cjs --outfile=node_modules/.cache/vdt.cjs --log-level=error && node node_modules/.cache/vdt.cjs",
-    "verify:derive": "esbuild scripts/verify-derive.ts --bundle --platform=node --format=cjs --outfile=node_modules/.cache/vdv.cjs --log-level=error && node node_modules/.cache/vdv.cjs"
+    "verify:derive": "esbuild scripts/verify-derive.ts --bundle --platform=node --format=cjs --outfile=node_modules/.cache/vdv.cjs --log-level=error && node node_modules/.cache/vdv.cjs",
+    "verify:seed": "esbuild scripts/verify-seed.ts --bundle --platform=node --format=cjs --outfile=node_modules/.cache/vs.cjs --log-level=error && node node_modules/.cache/vs.cjs"
   },
   "dependencies": {
     "google-auth-library": "^9.14.1",

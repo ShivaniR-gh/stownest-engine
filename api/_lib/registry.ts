@@ -140,8 +140,23 @@ export async function loadRegistry(force = false): Promise<DatasetDef[]> {
     .map(s => toDataset(s, byDataset.get(s.dataset_id) ?? []))
     .filter((d): d is DatasetDef => d !== null);
 
+  /**
+   * Seed definitions are a MIGRATION fallback, not a permanent data source.
+   *
+   * They carry no spreadsheet id, so they read the control workbook — which is
+   * how Finance and Sales ended up showing tabs nobody had connected. Once any
+   * source is configured, the seeds retire and a department shows data only if
+   * an admin connected its sheet.
+   *
+   * access_control is exempt: api/_lib/auth.ts resolves every principal through
+   * it, so it must exist before runtime configuration can be read at all.
+   */
+  const ALWAYS_KEEP = new Set(['access_control']);
   const ids = new Set(runtime.map(d => d.id));
-  const defs = [...runtime, ...SEED.filter(d => !ids.has(d.id))];
+  const usableSeed = runtime.length
+    ? SEED.filter(d => ALWAYS_KEEP.has(d.id))
+    : SEED;                                    // nothing configured yet
+  const defs = [...runtime, ...usableSeed.filter(d => !ids.has(d.id))];
 
   cache = { at: Date.now(), defs };
   return defs;
