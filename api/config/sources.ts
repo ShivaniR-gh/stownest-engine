@@ -4,7 +4,7 @@ import { fail, ok } from '../_lib/respond';
 import { HttpError, required } from '../_lib/env';
 import {
   appendKeyedRows, deleteRowsWhereFirstCol, ensureTab, listTabs, parseSpreadsheetId,
-  readRange, spreadsheetTitle, audit,
+  rangeForSheet, readRange, resolveTab, spreadsheetTitle, audit,
 } from '../_lib/sheets';
 import {
   MAPPINGS_HEADERS, MAPPINGS_TAB, SOURCES_HEADERS, SOURCES_TAB,
@@ -92,11 +92,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const tab = String(body.tab ?? '');
       if (!id || !tab) throw new HttpError(400, 'Choose a spreadsheet and a tab first.');
 
-      const values = await readRange(id, `${tab}!A1:ZZ11`);
-      if (!values.length) throw new HttpError(400, `The tab "${tab}" is empty. It needs a header row.`);
+      const resolvedTab = await resolveTab(id, tab);
+      const values = await readRange(id, rangeForSheet(resolvedTab, 'A1:ZZ11'));
+      if (!values.length) throw new HttpError(400, `The tab "${resolvedTab}" is empty. It needs a header row.`);
 
       const headers = values[0].map(h => String(h ?? '').trim()).filter(Boolean);
-      if (!headers.length) throw new HttpError(400, `Row 1 of "${tab}" has no column headings.`);
+      if (!headers.length) throw new HttpError(400, `Row 1 of "${resolvedTab}" has no column headings.`);
 
       const rows = values.slice(1, 6).map(r => headers.map((_, i) => String(r?.[i] ?? '')));
       const columns = headers.map((header, i) => ({

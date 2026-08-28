@@ -65,13 +65,57 @@ async function call<T>(sid: string, path: string, init?: RequestInit): Promise<T
 /* ------------------------------ tab metadata ------------------------------ */
 const sheetIds = new Map<string, Record<string, number>>();
 
-async function tabId(sid: string, name: string): Promise<number> {
+function normalizeTabName(value: string): string {
+  return String(value ?? '').trim().toLowerCase();
+}
+
+async function loadSheetMeta(sid: string): Promise<Record<string, number>> {
   if (!sheetIds.has(sid)) {
     const meta = await call<{ sheets: { properties: { sheetId: number; title: string } }[] }>(
       sid, '?fields=sheets.properties(sheetId,title)');
     sheetIds.set(sid, Object.fromEntries(meta.sheets.map(s => [s.properties.title, s.properties.sheetId])));
   }
-  const id = sheetIds.get(sid)![name];
+  return sheetIds.get(sid)!;
+}
+
+export function quoteSheetNameForA1(name: string): string {
+  const value = String(name ?? '').replace(/'/g, "''");
+  return `'${value}'`;
+}
+
+export function rangeForSheet(tabName: string, range: string): string {
+  return `${quoteSheetNameForA1(tabName)}!${range}`;
+}
+
+export async function resolveTab(spreadsheetId: string, rawTabName: string): Promise<string> {
+  const requested = String(rawTabName ?? '').trim();
+  if (!requested) throw new HttpError(400, 'A tab name is required.');
+
+  const meta = await loadSheetMeta(spreadsheetId);
+  if (meta[requested] !== undefined) return requested;
+
+  const normalized = normalizeTabName(requested);
+  const matches = Object.keys(meta)
+    .filter(title => normalizeTabName(title) === normalized)
+    .sort();
+
+  if (matches.length > 1) {
+    throw new HttpError(409,
+      `Multiple tabs match "${requested}" after case/whitespace normalization: ${matches.join(', ')}.`);
+  }
+  if (matches.length === 1) return matches[0];
+
+  const available = Object.keys(meta).sort();
+  throw new HttpError(404,
+    `No tab named "${requested}" was found in this spreadsheet. Available tabs: ${available.join(', ') || '(none)'}.`);
+}
+
+async function tabId(sid: string, name: string): Promise<number> {
+  const meta = await loadSheetMeta(sid);
+  const exact = meta[name];
+  if (exact !== undefined) return exact;
+  const resolved = await resolveTab(sid, name);
+  const id = meta[resolved];
   if (id === undefined) throw new HttpError(500, `Spreadsheet ${sid.slice(0, 8)}… has no tab named "${name}".`);
   return id;
 }
@@ -88,8 +132,10 @@ export interface SheetRead { rows: Row[]; unmappedSourceColumns: string[]; fetch
  * than disappearing.
  */
 export async function readDataset(ds: DatasetDef): Promise<SheetRead> {
-  const res = await call<{ values?: string[][] }>(spreadsheetIdFor(ds),
-    `/values/${encodeURIComponent(ds.sheetName)}?majorDimension=ROWS&valueRenderOption=UNFORMATTED_VALUE`);
+  const sid = spreadsheetIdFor(ds);
+  const tab = await resolveTab(sid, ds.sheetName);
+  const res = await call<{ values?: string[][] }>(sid,
+    `/values/${encodeURIComponent(quoteSheetNameForA1(tab))}?majorDimension=ROWS&valueRenderOption=UNFORMATTED_VALUE`);
 
   const values = res.values ?? [];
   if (!values.length) return { rows: [], unmappedSourceColumns: [], fetchedAt: Date.now() };
@@ -127,7 +173,9 @@ export async function readDataset(ds: DatasetDef): Promise<SheetRead> {
 
 /* -------------------------------- writing --------------------------------- */
 async function headerRow(ds: DatasetDef): Promise<string[]> {
-  const res = await call<{ values?: string[][] }>(spreadsheetIdFor(ds), `/values/${encodeURIComponent(ds.sheetName)}!1:1`);
+  const sid = spreadsheetIdFor(ds);
+  const tab = await resolveTab(sid, ds.sheetName);
+  const res = await call<{ values?: string[][] }>(sid, `/values/${encodeURIComponent(rangeForSheet(tab, '1:1'))}`);
   return (res.values?.[0] ?? []).map(h => String(h ?? ''));
 }
 
@@ -146,10 +194,12 @@ function toSheetRow(ds: DatasetDef, headers: string[], values: Row, existing?: s
 }
 
 export async function appendRow(ds: DatasetDef, values: Row): Promise<Row> {
+  const sid = spreadsheetIdFor(ds);
+  const tab = await resolveTab(sid, ds.sheetName);
   const headers = await headerRow(ds);
   const row = toSheetRow(ds, headers, values);
-  const res = await call<{ updates: { updatedRange: string } }>(spreadsheetIdFor(ds),
-    `/values/${encodeURIComponent(ds.sheetName)}!A1:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+  const res = await call<{ updates: { updatedRange: string } }>(sid,
+    `/values/${encodeURIComponent(rangeForSheet(tab, 'A1:append'))}?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
     { method: 'POST', body: JSON.stringify({ values: [row] }) });
 
   const rowNumber = Number(res.updates.updatedRange.match(/!\w+?(\d+)/)?.[1] ?? 0);
@@ -157,13 +207,15 @@ export async function appendRow(ds: DatasetDef, values: Row): Promise<Row> {
 }
 
 export async function updateRowByIndex(ds: DatasetDef, rowNumber: number, values: Row): Promise<Row> {
+  const sid = spreadsheetIdFor(ds);
+  const tab = await resolveTab(sid, ds.sheetName);
   const headers = await headerRow(ds);
-  const current = await call<{ values?: string[][] }>(spreadsheetIdFor(ds),
-    `/values/${encodeURIComponent(ds.sheetName)}!${rowNumber}:${rowNumber}`);
+  const current = await call<{ values?: string[][] }>(sid,
+    `/values/${encodeURIComponent(rangeForSheet(tab, `${rowNumber}:${rowNumber}`))}`);
   const existing = current.values?.[0] ?? [];
   const row = toSheetRow(ds, headers, values, existing);
 
-  await call(spreadsheetIdFor(ds), `/values/${encodeURIComponent(ds.sheetName)}!A${rowNumber}?valueInputOption=USER_ENTERED`,
+  await call(sid, `/values/${encodeURIComponent(rangeForSheet(tab, `A${rowNumber}`))}?valueInputOption=USER_ENTERED`,
     { method: 'PUT', body: JSON.stringify({ values: [row] }) });
 
   const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ');
@@ -203,7 +255,7 @@ export async function audit(entry: {
 }): Promise<void> {
   try {
     await call(required('SHEETS_SPREADSHEET_ID'),
-      `/values/${encodeURIComponent('audit_log')}!A1:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`, {
+      `/values/${encodeURIComponent(rangeForSheet('audit_log', 'A1:append'))}?valueInputOption=RAW&insertDataOption=INSERT_ROWS`, {
       method: 'POST',
       body: JSON.stringify({
         values: [[new Date().toISOString(), entry.actor, entry.action, entry.dataset, entry.recordId, entry.detail ?? '']],
@@ -247,9 +299,10 @@ export async function ensureTab(spreadsheetId: string, title: string, headers: r
     });
     sheetIds.delete(spreadsheetId);
   }
-  const existing = await readRange(spreadsheetId, `${title}!1:1`);
+  const resolvedTitle = await resolveTab(spreadsheetId, title);
+  const existing = await readRange(spreadsheetId, rangeForSheet(resolvedTitle, '1:1'));
   if (!existing.length || !existing[0]?.length) {
-    await call(spreadsheetId, `/values/${encodeURIComponent(`${title}!A1`)}?valueInputOption=RAW`,
+    await call(spreadsheetId, `/values/${encodeURIComponent(rangeForSheet(resolvedTitle, 'A1'))}?valueInputOption=RAW`,
       { method: 'PUT', body: JSON.stringify({ values: [headers] }) });
   }
 }
@@ -270,18 +323,19 @@ export async function appendKeyedRows(
 ): Promise<void> {
   if (!records.length) return;
 
-  const existing = await readRange(spreadsheetId, `${tab}!1:1`);
+  const resolvedTab = await resolveTab(spreadsheetId, tab);
+  const existing = await readRange(spreadsheetId, rangeForSheet(resolvedTab, '1:1'));
   let headers = (existing[0] ?? []).map(h => String(h ?? '').trim()).filter(Boolean);
 
   // Extend the header row rather than reordering it: existing data stays put.
   const missing = expectedHeaders.filter(h => !headers.some(x => x.toLowerCase() === h.toLowerCase()));
   if (!headers.length) {
     headers = [...expectedHeaders];
-    await call(spreadsheetId, `/values/${encodeURIComponent(`${tab}!A1`)}?valueInputOption=RAW`,
+    await call(spreadsheetId, `/values/${encodeURIComponent(rangeForSheet(resolvedTab, 'A1'))}?valueInputOption=RAW`,
       { method: 'PUT', body: JSON.stringify({ values: [headers] }) });
   } else if (missing.length) {
     headers = [...headers, ...missing];
-    await call(spreadsheetId, `/values/${encodeURIComponent(`${tab}!A1`)}?valueInputOption=RAW`,
+    await call(spreadsheetId, `/values/${encodeURIComponent(rangeForSheet(resolvedTab, 'A1'))}?valueInputOption=RAW`,
       { method: 'PUT', body: JSON.stringify({ values: [headers] }) });
   }
 
@@ -294,26 +348,28 @@ export async function appendKeyedRows(
     }
     return out;
   });
-  await appendRows(spreadsheetId, tab, rows);
+  await appendRows(spreadsheetId, resolvedTab, rows);
 }
 
 export async function appendRows(spreadsheetId: string, tab: string, rows: (string | number)[][]): Promise<void> {
   if (!rows.length) return;
+  const resolvedTab = await resolveTab(spreadsheetId, tab);
   await call(spreadsheetId,
-    `/values/${encodeURIComponent(`${tab}!A1`)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
+    `/values/${encodeURIComponent(rangeForSheet(resolvedTab, 'A1:append'))}?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
     { method: 'POST', body: JSON.stringify({ values: rows }) });
 }
 
 /** Removes every row whose first column equals `key`. Used to replace a
  *  dataset's mapping rows atomically enough for a config tab. */
 export async function deleteRowsWhereFirstCol(spreadsheetId: string, tab: string, key: string): Promise<void> {
-  const values = await readRange(spreadsheetId, tab);
+  const resolvedTab = await resolveTab(spreadsheetId, tab);
+  const values = await readRange(spreadsheetId, quoteSheetNameForA1(resolvedTab));
   const targets: number[] = [];
   for (let r = 1; r < values.length; r++) {
     if (String(values[r]?.[0] ?? '').trim() === key) targets.push(r + 1);
   }
   if (!targets.length) return;
-  const sid = await tabId(spreadsheetId, tab);
+  const sid = await tabId(spreadsheetId, resolvedTab);
   // Delete bottom-up so earlier indices stay valid.
   await call(spreadsheetId, ':batchUpdate', {
     method: 'POST',
