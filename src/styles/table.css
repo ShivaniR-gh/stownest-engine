@@ -66,3 +66,94 @@
 .chip b { font-weight: 650; }
 .chip__x { display: grid; place-items: center; width: 15px; height: 15px; border-radius: 3px; opacity: .7; }
 .chip__x:hover { opacity: 1; background: var(--accent-line); }
+
+/* ==========================================================================
+   Transposed view — field names down the left, one column per record.
+   The label column is sticky: with a dozen fields the value you are reading
+   is often far right, and an unlabelled number is worthless.
+   ========================================================================== */
+.xpose__scroll { overflow-x: auto; }
+.xpose { border-collapse: separate; border-spacing: 0; width: max-content; min-width: 100%; }
+
+.xpose th,
+.xpose td {
+  padding: 9px var(--s4);
+  border-bottom: 1px solid var(--line-faint);
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+  text-align: right;
+}
+
+.xpose thead th {
+  position: sticky; top: 0; z-index: 2;
+  background: var(--surface-sunk);
+  border-bottom: 1px solid var(--line);
+  font-size: var(--fs-micro); font-weight: 650;
+  letter-spacing: .05em; text-transform: uppercase; color: var(--ink-600);
+}
+
+/* The label column is sized, not stretched. Left to itself the table hands it
+   whatever space the month columns do not use, which on a two-month dataset is
+   half the screen and reads as a gap rather than a column. */
+.xpose__corner,
+.xpose__rowhd {
+  position: sticky; left: 0; z-index: 1;
+  width: 240px; min-width: 240px; max-width: 240px;
+  text-align: left;
+  background: var(--surface);
+  border-right: 1px solid var(--line);
+  font-weight: 550; color: var(--ink-700);
+  white-space: normal;
+}
+/* Months share the remaining width evenly rather than each hugging its digits. */
+.xpose thead th:not(.xpose__corner) { min-width: 140px; }
+.xpose__corner { z-index: 3; background: var(--surface-sunk); }
+.xpose tbody tr:hover td,
+.xpose tbody tr:hover .xpose__rowhd { background: var(--surface-sunk); }
+
+/* The first data column is the newest record, so give it slightly more weight
+   than the history beside it. */
+.xpose tbody td:nth-child(2) { font-weight: 600; color: var(--ink-900); }
+
+/* Section bands. The sheet uses colour blocks to separate the summary from the
+   revenue split; here the same job is done with weight and a tinted row, which
+   survives a dark theme and a monochrome print. */
+.xpose__band th,
+.xpose__band td {
+  background: var(--surface-sunk);
+  border-top: 1px solid var(--line);
+  font-weight: 650;
+  font-size: var(--fs-micro);
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: var(--ink-600);
+}
+.xpose__sub th,
+.xpose__sub td {
+  background: var(--accent-soft);
+  font-weight: 620;
+  color: var(--accent);
+}
+/* Fields belonging to a segment sit indented under its name. */
+.xpose__rowhd--in { padding-left: var(--s6); color: var(--ink-600); font-weight: 500; }
+
+/* Edit control, one per month, in the table foot. */
+.xpose__foot th,
+.xpose__foot td {
+  border-top: 1px solid var(--line);
+  border-bottom: 0;
+  background: var(--surface-sunk);
+  padding-top: 7px; padding-bottom: 7px;
+}
+.xpose__edit {
+  display: inline-flex; align-items: center; gap: 5px;
+  height: 26px; padding: 0 10px;
+  border: 1px solid var(--line-strong); border-radius: var(--r-md);
+  background: var(--surface); color: var(--ink-600);
+  font: inherit; font-size: var(--fs-xs); font-weight: 550;
+  cursor: pointer;
+  transition: background-color var(--t-fast), border-color var(--t-fast), color var(--t-fast);
+}
+.xpose__edit:hover { background: var(--accent-soft); border-color: var(--accent-line); color: var(--accent); }
+.xpose__edit:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+@media (prefers-reduced-motion: reduce) { .xpose__edit { transition: none; } }

@@ -145,3 +145,123 @@ select.field { cursor: pointer; appearance: none; padding-right: 26px;
   border-bottom: 1px solid var(--signal); background: var(--signal-soft); color: var(--signal);
 }
 .modal { border-radius: var(--r-xl); }
+
+/* ── Reading form ─────────────────────────────────────────────────────────── */
+/* Read-only facts about the selected warehouse, so the person can confirm they
+   picked the right one before typing a figure. */
+.reading-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s3) var(--s5);
+  padding: var(--s3) var(--s4);
+  background: var(--bg-sunken);
+  border-radius: var(--r-md);
+  font-size: var(--fs-sm);
+}
+.reading-facts > div { display: flex; flex-direction: column; gap: 2px; }
+.reading-facts__k {
+  font-size: var(--fs-micro);
+  color: var(--ink-400);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+/* Live preview of the derived figures. The server recomputes these on write —
+   what is shown here is guidance, not the stored value. */
+.reading-calc {
+  padding: var(--s4);
+  background: var(--bg-sunken);
+  border-radius: var(--r-md);
+  display: grid;
+  gap: var(--s2);
+}
+.reading-calc__row {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--fs-sm);
+}
+.reading-calc__bar {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--ink-100, rgba(0,0,0,.08));
+  overflow: hidden;
+  margin-top: var(--s1);
+}
+.reading-calc__fill { display: block; height: 100%; border-radius: 999px; }
+.reading-calc__fill[data-band="low"]  { background: var(--pos); }
+.reading-calc__fill[data-band="mid"]  { background: var(--accent); }
+.reading-calc__fill[data-band="high"] { background: var(--signal); }
+.reading-calc__fill[data-band="full"] { background: var(--neg); }
+
+.form-error, .form-notice {
+  margin-bottom: var(--s4);
+  padding: var(--s3);
+  border-radius: var(--r-md);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+}
+.form-error  { background: var(--neg-soft);    color: var(--neg); }
+.form-notice { background: var(--signal-soft, var(--bg-sunken)); color: var(--ink-600, inherit); }
+
+/* ── View toggle (Dashboard / Records) ────────────────────────────────────── */
+.view-toggle {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  margin-bottom: var(--s5);
+  background: var(--bg-sunken);
+  border-radius: var(--r-md);
+}
+.view-toggle__btn {
+  padding: var(--s2) var(--s4);
+  border: 0;
+  border-radius: calc(var(--r-md) - 3px);
+  background: transparent;
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  color: var(--ink-600);
+  cursor: pointer;
+}
+.view-toggle__btn:hover { color: var(--ink-900, inherit); }
+.view-toggle__btn.is-active {
+  background: var(--bg-raised, #fff);
+  color: var(--ink-900, inherit);
+  box-shadow: var(--shadow-sm, 0 1px 2px rgba(0,0,0,.08));
+}
+
+/* ── Per-view filter bar ──────────────────────────────────────────────────── */
+/* Dashboard and Records each own one, so they can legitimately be showing
+   different months — which is why the month sits first and is visually
+   distinct rather than buried among the other dropdowns. */
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s2);
+  margin-bottom: var(--s5);
+}
+.filter-bar__field {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2);
+  padding: 0 var(--s3);
+  height: 34px;
+  background: var(--bg-raised, #fff);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  font-size: var(--fs-sm);
+  color: var(--ink-600);
+}
+.filter-bar__field select {
+  border: 0;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  outline: none;
+  cursor: pointer;
+  max-width: 190px;
+}
+.filter-bar__field select:disabled { color: var(--ink-400); cursor: default; }
+.filter-bar__field--month { font-weight: 600; color: var(--ink-900, inherit); }
+.filter-bar__field--wide select { max-width: 280px; }

@@ -1,5 +1,5 @@
 import type { Row } from '@/config/types';
-import { DataError, type DataAdapter, type FetchResult } from './adapter';
+import { DataError, type DataAdapter, type DataOpts, type FetchResult } from './adapter';
 import { getIdToken } from '@/lib/auth/googleIdentity';
 
 /** Talks only to our own /api routes. The service-account key, the spreadsheet
@@ -19,11 +19,16 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
   if (!res.ok) {
     let detail: string | undefined;
     try { detail = (await res.json())?.error; } catch { /* non-JSON error body */ }
+    // The server explains WHY a write was refused — "Warehouse blr:1 is not in
+    // the warehouse list", "Occupied space cannot exceed 11,247 sqft". Throwing
+    // a generic message instead leaves the person with nothing to act on, so
+    // the server's text wins whenever it sent one.
     throw new DataError(
-      res.status === 401 ? 'Your session expired. Sign in again to continue.'
-        : res.status === 403 ? 'You do not have permission for this.'
-        : res.status === 429 ? 'Google is rate-limiting us. Try again in a moment.'
-        : 'Could not reach the data service.',
+      detail
+        || (res.status === 401 ? 'Your session expired. Sign in again to continue.'
+          : res.status === 403 ? 'You do not have permission for this.'
+          : res.status === 429 ? 'Google is rate-limiting us. Try again in a moment.'
+          : 'Could not reach the data service.'),
       res.status,
       detail,
     );
@@ -31,27 +36,42 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+/** Builds the query string, omitting `tab` for static datasets. */
+function qs(parts: Record<string, string | undefined>): string {
+  const q = Object.entries(parts)
+    .filter(([, v]) => v !== undefined && v !== '')
+    .map(([k, v]) => `${k}=${encodeURIComponent(v!)}`)
+    .join('&');
+  return q ? `?${q}` : '';
+}
+
 export class SheetsAdapter implements DataAdapter {
   readonly kind = 'sheets' as const;
 
-  async list(datasetId: string, signal?: AbortSignal): Promise<FetchResult> {
-    return call<FetchResult>(`/data/${encodeURIComponent(datasetId)}`, { method: 'GET', signal });
+  async list(datasetId: string, opts: DataOpts = {}): Promise<FetchResult> {
+    return call<FetchResult>(
+      `/data/${encodeURIComponent(datasetId)}${qs({ tab: opts.tab })}`,
+      { method: 'GET', signal: opts.signal },
+    );
   }
-  async create(datasetId: string, values: Row): Promise<Row> {
-    const r = await call<{ row: Row }>(`/data/${encodeURIComponent(datasetId)}`, {
-      method: 'POST', body: JSON.stringify({ values }),
-    });
+  async create(datasetId: string, values: Row, opts: DataOpts = {}): Promise<Row> {
+    const r = await call<{ row: Row }>(
+      `/data/${encodeURIComponent(datasetId)}${qs({ tab: opts.tab })}`,
+      { method: 'POST', body: JSON.stringify({ values }) },
+    );
     return r.row;
   }
-  async update(datasetId: string, id: string, values: Row): Promise<Row> {
-    const r = await call<{ row: Row }>(`/data/${encodeURIComponent(datasetId)}?id=${encodeURIComponent(id)}`, {
-      method: 'PATCH', body: JSON.stringify({ values }),
-    });
+  async update(datasetId: string, id: string, values: Row, opts: DataOpts = {}): Promise<Row> {
+    const r = await call<{ row: Row }>(
+      `/data/${encodeURIComponent(datasetId)}${qs({ id, tab: opts.tab })}`,
+      { method: 'PATCH', body: JSON.stringify({ values }) },
+    );
     return r.row;
   }
-  async remove(datasetId: string, id: string): Promise<void> {
-    await call<{ ok: true }>(`/data/${encodeURIComponent(datasetId)}?id=${encodeURIComponent(id)}`, {
-      method: 'DELETE',
-    });
+  async remove(datasetId: string, id: string, opts: DataOpts = {}): Promise<void> {
+    await call<{ ok: true }>(
+      `/data/${encodeURIComponent(datasetId)}${qs({ id, tab: opts.tab })}`,
+      { method: 'DELETE' },
+    );
   }
 }

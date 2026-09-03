@@ -1,8 +1,10 @@
 import type { DepartmentId } from './types';
 
 export interface DepartmentDef {
+  customDashboard?: boolean;
   id: DepartmentId;
   label: string;
+  
   /** Short line shown under the page title. */
   purpose: string;
   icon: string;
@@ -13,6 +15,7 @@ export interface DepartmentDef {
   /** Metric ids for the KPI row. Empty for runtime departments until the
    *  declarative metric engine lands. */
   metrics: string[];
+  businessLines?: { id: string; icon?: string }[];
   /** Appears in the sidebar WORKSPACE group. */
   inWorkspace: boolean;
 }
@@ -65,6 +68,20 @@ const SEED: DepartmentDef[] = [
     icon: 'receipt',
     metrics: ['coll.receivable', 'coll.collected', 'coll.outstanding', 'coll.overdue', 'coll.rate', 'coll.dso'],
     inWorkspace: true,
+    businessLines: [{ id: 'B2C', icon: 'users' }, { id: 'B2B', icon: 'chart' }],
+    customDashboard: true,
+  },
+  {
+    id: 'marketing',
+    label: 'Marketing',
+    purpose: 'Lead volume and quality by category, and what each lead costs to acquire.',
+    icon: 'trending',
+    // Empty for the same reason collections is: the department renders its own
+    // dashboard, and deriveKpis would guess a second set of cards from the
+    // same columns and print every figure twice.
+    metrics: [],
+    inWorkspace: true,
+    customDashboard: true,
   },
   {
     id: 'finance',

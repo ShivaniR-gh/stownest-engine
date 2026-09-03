@@ -9,6 +9,7 @@ import './styles/metrics.css';
 import './styles/table.css';
 import './styles/chart.css';
 import './styles/controls.css';
+import './styles/filters.css';
 
 document.documentElement.dataset.theme = localStorage.getItem('sn.theme') ?? 'light';
 

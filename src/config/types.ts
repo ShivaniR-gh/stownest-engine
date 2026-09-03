@@ -59,6 +59,21 @@ export interface ColumnDef {
   /** Show a column total in the table footer. */
   aggregate?: 'sum' | 'avg' | 'count';
   help?: string;
+
+  /* ---- validation, enforced identically in the form and the API ---- */
+  /** Numbers: minimum value. Ignored for other types. */
+  min?: number;
+  max?: number;
+  /** Regex source string, e.g. '^[A-Z]{3}:[0-9]{3}$'. */
+  pattern?: string;
+  /** Shown when `pattern` fails, e.g. 'PUN:002'. */
+  patternHint?: string;
+  /** No two rows in the same destination tab may share this value. */
+  unique?: boolean;
+
+  /** Written by the server, not the user. Hidden from the form, skipped by
+   *  validation, filled by api/_lib/derive.ts before the write. */
+  derived?: boolean;
 }
 
 export interface DatasetDef {
@@ -67,6 +82,8 @@ export interface DatasetDef {
   /** Singular noun used in buttons and detail headers: "New job", "Delete lead". */
   noun: string;
   department: DepartmentId;
+  businessLine?: string;
+  icon?: string;
   /** Tab name inside the spreadsheet. */
   sheetName: string;
   /**
@@ -89,9 +106,61 @@ export interface DatasetDef {
   titleColumn: string;
   subtitleColumns?: string[];
   columns: ColumnDef[];
+  /**
+   * Key of an enum column whose values become sub-tabs above the records
+   * table. Use when one dataset holds several parallel series that are read
+   * separately — three revenue segments, say — and a single flat table would
+   * interleave them. Purely a view concern: the rows stay one dataset, so
+   * charts and totals still see them together.
+   */
+  subTabColumn?: string;
+  /**
+   * Offer a transposed view: field names down the left, one column per record.
+   * Worth it for datasets that are a short list of figures per period, where a
+   * row-per-record table is wider than the screen and reads like a spreadsheet
+   * nobody laid out on purpose.
+   */
+  transposable?: boolean;
+  /**
+   * This dataset is written by a combined entry form the page supplies, not by
+   * the generic record dialog. Set it on every dataset that form touches, so
+   * the two write surfaces never both offer a New button for the same tab.
+   */
+  combinedEntry?: boolean;
+  /**
+   * Which combined form writes this dataset, when `combinedEntry` is set. The
+   * dataset names its form so the page can look one up instead of branching on
+   * a department id — a department can then own several datasets with
+   * different entry shapes, and adding one touches no shared component.
+   */
+    entryForm?: 'collections' | 'marketing' | 'b2c_report';
   defaultSort?: { key: string; dir: 'asc' | 'desc' };
   /** Written to an audit tab on every mutation. */
   auditable?: boolean;
+
+  /* ------------------------------ month tabs ------------------------------ */
+  /**
+   * 'static'  — every record goes to `sheetName`.
+   * 'monthly' — the user picks a month; each month is its own tab.
+   */
+  tabStrategy?: 'static' | 'monthly';
+  /** Tab name prefix for monthly datasets, e.g. 'Readings' produces
+   *  "Readings MAR 2026". Lets several monthly datasets share one workbook
+   *  without their March tabs colliding. Defaults to `sheetName`. */
+  tabPrefix?: string;
+  /** How far back and forward the month picker reaches. Bounding this stops a
+   *  typo creating a tab years out that nobody notices. */
+  monthsBack?: number;
+  monthsForward?: number;
+  /** Defaults to true: a missing tab is created with the schema's header row
+   *  on first write. Set false only for a tab the app must not create. */
+  createMissingTab?: boolean;
+
+  /**
+   * Rules spanning more than one field, run server-side after per-field checks.
+   * Return null when the record is acceptable.
+   */
+  crossFieldRules?: Array<(values: Row) => { key: string; message: string } | null>;
 }
 
 export type MetricFormat = 'inr' | 'inr_compact' | 'int' | 'pct' | 'pp' | 'decimal' | 'days';

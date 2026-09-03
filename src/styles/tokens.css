@@ -70,14 +70,14 @@
   /* Categorical series — deliberately varied, ordered so the first three are
      furthest apart. Every hue is pulled back from full saturation so a chart
      with eight series still reads as one product, not a rainbow. */
-  --c1: #2563eb;  /* blue     */
-  --c2: #10b981;  /* green    */
-  --c3: #f59e0b;  /* orange   */
-  --c4: #ec4899;  /* rose     */
-  --c5: #8b5cf6;  /* purple   */
-  --c6: #38bdf8;  /* skyblue  */
-  --c7: #0d9488;  /* teal     */
-  --c8: #ef4444;  /* red      */
+  --c1: #4f7df3;  /* indigo   */
+  --c2: #14b88a;  /* emerald  */
+  --c3: #f5842c;  /* amber    */
+  --c4: #a855c7;  /* orchid   */
+  --c5: #ec5f8a;  /* rose     */
+  --c6: #38a8d8;  /* sky      */
+  --c7: #10a396;  /* teal     */
+  --c8: #e0574f;  /* coral    */
   --grid: #eef2f7;
 
   /* Type */
@@ -160,8 +160,10 @@
   --info: #3b82f6; --info-soft: #152744;
   --idle: #94a3bd; --idle-soft: #1b2436;
 
-  --c1: #3b82f6; --c2: #f59e0b; --c3: #10b981; --c4: #a78bfa;
-  --c5: #38bdf8; --c6: #ef4444; --c7: #2dd4bf; --c8: #ec4899;
+  /* Same hues as light, lifted in lightness and eased off saturation just
+     enough that they do not glow against navy. */
+  --c1: #6d95f0; --c2: #2ecfa0; --c3: #f79a4d; --c4: #bd74d8;
+  --c5: #f07a9f; --c6: #55bce6; --c7: #2dbdae; --c8: #ec7168;
   --grid: #1a2338;
 
   --sh-sm: 0 1px 2px rgba(0,0,0,.3);

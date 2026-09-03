@@ -51,7 +51,7 @@ export async function loadDepartments(force = false): Promise<DepartmentDef[]> {
 
   const runtime: DepartmentDef[] = rows
     .filter(r => ID_PATTERN.test(r.id ?? ''))
-    .map(r => ({
+        .map(r => ({
       id: r.id,
       label: r.label || r.id,
       purpose: r.purpose ?? '',
@@ -59,6 +59,15 @@ export async function loadDepartments(force = false): Promise<DepartmentDef[]> {
       status: (r.status ?? 'Active').toLowerCase() === 'inactive' ? 'Inactive' : 'Active',
       sortOrder: Number(r.sort_order) || 0,
       metrics: SEED_DEPARTMENTS.find(s => s.id === r.id)?.metrics ?? [],
+      // The sheet owns identity — id, label, purpose, icon, status — but has no
+      // column for a flag that selects a compiled component. Without this line
+      // the runtime row drops it and the department falls back to the generic
+      // dashboard and the generic record form.
+      customDashboard: SEED_DEPARTMENTS.find(s => s.id === r.id)?.customDashboard,
+            // Same reason as customDashboard above: the sheet has no column for it,
+      // so a runtime row silently drops it and the department loses its
+      // line-of-business tabs.
+      businessLines: SEED_DEPARTMENTS.find(s => s.id === r.id)?.businessLines,
       inWorkspace: r.id !== 'administration',
     }));
 

@@ -135,3 +135,68 @@
 .prov__v { color: var(--ink-700); font-family: var(--font-num); font-size: 10.5px; word-break: break-word; }
 
 .metric__spark { margin-top: var(--s2); height: 28px; }
+
+/* ==========================================================================
+   Vivid KPI row
+   Every card in the top row carries its own gradient field, rotating through
+   four hues by position. Note this is decorative — unlike the tonal top edge
+   above, the hue says nothing about the metric's state. Keep the tonal rules
+   intact so state is still readable inside the coloured card.
+   ========================================================================== */
+:root {
+  --kpi-1a: #4f7df3;  --kpi-1b: #3b5bdb;   /* indigo  */
+  --kpi-2a: #14b88a;  --kpi-2b: #0e9488;   /* emerald */
+  --kpi-3a: #f5842c;  --kpi-3b: #e2620f;   /* amber   */
+  --kpi-4a: #a855c7;  --kpi-4b: #8b3fb0;   /* orchid  */
+}
+[data-theme='dark'] {
+  /* Pulled down, not up: a gradient that sings on white becomes a light
+     source on navy and blows out the white numerals sitting on it. */
+  --kpi-1a: #3f63c4;  --kpi-1b: #2f479f;
+  --kpi-2a: #109070;  --kpi-2b: #0b7268;
+  --kpi-3a: #c96a26;  --kpi-3b: #a94d10;
+  --kpi-4a: #83459c;  --kpi-4b: #6a3189;
+}
+
+.grid--kpi .metric {
+  border-color: transparent;
+  color: #fff;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, .06), 0 8px 22px rgba(16, 24, 40, .10);
+}
+.grid--kpi .metric:nth-child(4n+1) { background: linear-gradient(140deg, var(--kpi-1a), var(--kpi-1b)); }
+.grid--kpi .metric:nth-child(4n+2) { background: linear-gradient(140deg, var(--kpi-2a), var(--kpi-2b)); }
+.grid--kpi .metric:nth-child(4n+3) { background: linear-gradient(140deg, var(--kpi-3a), var(--kpi-3b)); }
+.grid--kpi .metric:nth-child(4n+4) { background: linear-gradient(140deg, var(--kpi-4a), var(--kpi-4b)); }
+
+/* Everything inside inherits white ink rather than the theme's. */
+.grid--kpi .metric__label,
+.grid--kpi .metric__cmp,
+.grid--kpi .metric__fx   { color: rgba(255, 255, 255, .74); }
+.grid--kpi .metric__value { color: #fff; }
+.grid--kpi .metric__icon {
+  background: rgba(255, 255, 255, .18);
+  color: #fff;
+  border-color: transparent;
+}
+.grid--kpi .metric__track { background: rgba(255, 255, 255, .24); }
+.grid--kpi .metric__track > span { background: #fff; }
+.grid--kpi .metric__fx:hover,
+.grid--kpi .metric__fx[aria-expanded='true'] { background: rgba(255,255,255,.2); color: #fff; }
+
+/* State still has to read on a coloured field, so deltas keep their own
+   chips rather than relying on hue against the gradient. */
+.grid--kpi .delta--pos { color: #fff; background: rgba(255, 255, 255, .22); }
+.grid--kpi .delta--neg { color: #fff; background: rgba(0, 0, 0, .26); }
+
+/* The tonal top edge would be invisible on the gradient; drop it and let the
+   card's own colour carry the emphasis instead. */
+.grid--kpi .metric::before { display: none; }
+.grid--kpi .metric--lead { background: linear-gradient(140deg, var(--kpi-1a), var(--kpi-1b)); }
+.grid--kpi .metric--lead .metric__value,
+.grid--kpi .metric--lead .metric__label,
+.grid--kpi .metric--lead .metric__cmp { color: inherit; }
+.grid--kpi .metric--lead .metric__value { color: #fff; }
+.grid--kpi .metric--lead .metric__label { color: rgba(255,255,255,.74); }
+.grid--kpi .metric--lead .metric__icon { background: rgba(255,255,255,.18); color: #fff; }
+
+.grid--kpi .metric:hover { transform: translateY(-2px); box-shadow: 0 4px 10px rgba(16,24,40,.10), 0 18px 40px rgba(16,24,40,.16); }

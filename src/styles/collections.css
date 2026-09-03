@@ -1,0 +1,162 @@
+/* ==========================================================================
+   Collections dashboard.
+
+   The four headline cards take the gradient treatment from metrics.css, but
+   with hues fixed per position rather than rotating — Raised and Collected
+   should not swap colour when a card is added. Outstanding and Gap sit on the
+   warm end because they are the two figures that ask for action.
+   ========================================================================== */
+
+.coll__kpi[data-kpi='1'] { background: linear-gradient(140deg, var(--kpi-1a), var(--kpi-1b)); }
+.coll__kpi[data-kpi='2'] { background: linear-gradient(140deg, var(--kpi-2a), var(--kpi-2b)); }
+.coll__kpi[data-kpi='3'] { background: linear-gradient(140deg, var(--kpi-3a), var(--kpi-3b)); }
+.coll__kpi[data-kpi='4'] { background: linear-gradient(140deg, var(--kpi-4a), var(--kpi-4b)); }
+.coll__kpi { border-color: transparent; }
+.coll__kpi .metric__value { font-size: var(--fs-2xl); letter-spacing: -.025em; }
+
+/* ---------- Month picker ---------- */
+.coll__month select {
+  height: 30px; padding: 0 26px 0 10px;
+  border: 1px solid var(--line-strong); border-radius: var(--r-md);
+  background-color: var(--surface); color: var(--ink-700);
+  font: inherit; font-size: var(--fs-sm); cursor: pointer;
+  appearance: none;
+  background-image: var(--fl-chevron);
+  background-repeat: no-repeat; background-position: right 9px center; background-size: 12px;
+}
+.coll__month select:hover { border-color: var(--ink-300); }
+.coll__month select:focus-visible { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+
+/* ---------- Cumulative strip ---------- */
+.coll__strip {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--s3); margin-top: var(--s3);
+}
+.coll__cell {
+  display: flex; flex-direction: column; gap: 3px;
+  padding: var(--s3) var(--s4);
+  background: var(--surface-sunk); border: 1px solid var(--line-faint);
+  border-radius: var(--r-md);
+}
+.coll__lb {
+  font-size: var(--fs-micro); font-weight: 650; letter-spacing: .05em;
+  text-transform: uppercase; color: var(--ink-400);
+}
+.coll__v { font-size: var(--fs-lg); font-weight: 600; color: var(--ink-900); }
+
+/* ---------- Revenue segments ---------- */
+.coll__segs {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: var(--s3);
+}
+.coll__seg {
+  padding: var(--s4); background: var(--surface);
+  border: 1px solid var(--line); border-radius: var(--r-lg);
+  box-shadow: var(--sh-sm); cursor: pointer;
+  transition: border-color var(--t-fast), box-shadow var(--t-fast), transform var(--t-fast);
+}
+.coll__seg:hover { border-color: var(--accent-line); box-shadow: var(--sh-md); transform: translateY(-1px); }
+.coll__seg-hd { display: flex; align-items: baseline; gap: var(--s2); margin-bottom: var(--s2); }
+.coll__seg-nm { font-size: var(--fs-sm); font-weight: 600; color: var(--ink-900); }
+.coll__seg-share { margin-left: auto; font-size: var(--fs-sm); font-weight: 600; color: var(--accent); }
+
+/* Share of revenue as a track, so three segments can be compared by eye
+   without reading four numbers each. */
+.coll__seg-bar { height: 5px; border-radius: 999px; background: var(--line-faint); overflow: hidden; }
+.coll__seg-bar > span { display: block; height: 100%; border-radius: 999px; background: var(--accent); }
+
+.coll__seg-rows { margin: var(--s3) 0 0; display: grid; gap: 5px; }
+.coll__seg-rows > div { display: flex; align-items: baseline; gap: var(--s2); }
+.coll__seg-rows dt { font-size: var(--fs-xs); color: var(--ink-600); }
+.coll__seg-rows dd { margin: 0 0 0 auto; font-size: var(--fs-xs); font-weight: 550; color: var(--ink-900); }
+
+/* ---------- Leakage ---------- */
+.coll__leak {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--s3);
+}
+.coll__leak-cell {
+  display: flex; flex-direction: column; gap: 4px;
+  padding: var(--s4); border-radius: var(--r-lg);
+  background: var(--surface); border: 1px solid var(--line);
+}
+.coll__leak-cell[data-tone='warn'] { border-color: var(--signal); background: var(--signal-soft); }
+.coll__leak-cell[data-tone='warn'] .coll__leak-v { color: var(--signal); }
+.coll__leak-v { font-size: var(--fs-xl); font-weight: 600; letter-spacing: -.02em; color: var(--ink-900); }
+.coll__leak-c { font-size: var(--fs-xs); color: var(--ink-600); }
+
+@media (prefers-reduced-motion: reduce) {
+  .coll__seg { transition: none; }
+}
+
+/* ==========================================================================
+   Combined entry form.
+   Entered fields and calculated ones look different on purpose: a flat panel
+   with no border reads as output, not input, so nobody tries to type in it.
+   ========================================================================== */
+.cef__sec {
+  font-size: var(--fs-base); font-weight: 620; color: var(--ink-900);
+  margin: var(--s6) 0 var(--s3); padding-bottom: var(--s2);
+  border-bottom: 1px solid var(--line);
+}
+.cef__sec:first-of-type { margin-top: 0; }
+.cef__sub {
+  display: flex; align-items: center; gap: var(--s2);
+  font-size: var(--fs-sm); font-weight: 620; color: var(--ink-700);
+  margin: var(--s5) 0 var(--s2);
+}
+.cef__tag {
+  font-size: var(--fs-micro); font-weight: 600; letter-spacing: .03em;
+  padding: 2px 8px; border-radius: 999px;
+  background: var(--accent-soft); color: var(--accent);
+}
+.cef__grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: var(--s3) var(--s4);
+}
+.cef__out {
+  display: flex; align-items: center; height: 34px; padding: 0 11px;
+  border-radius: var(--r-md); background: var(--surface-sunk);
+  border: 1px solid transparent;
+  font-size: var(--fs-sm); font-weight: 600; color: var(--ink-700);
+}
+.cef__err {
+  padding: var(--s3) var(--s4); margin-bottom: var(--s4);
+  border-radius: var(--r-md); background: var(--neg-soft);
+  color: var(--neg); font-size: var(--fs-sm); font-weight: 550;
+}
+.cef__warn {
+  margin: var(--s5) 0 0; padding: var(--s3) var(--s4) var(--s3) var(--s6);
+  border-radius: var(--r-md); background: var(--signal-soft);
+  color: var(--signal); font-size: var(--fs-xs);
+}
+
+.cef__note {
+  margin: var(--s4) 0 0; padding: var(--s3) var(--s4);
+  border-radius: var(--r-md); background: var(--surface-sunk);
+  border: 1px solid var(--line-faint);
+  font-size: var(--fs-xs); color: var(--ink-600);
+}
+
+/* Rupee sits inside the field rather than in the label, so the column of
+   inputs reads as money at a glance without repeating the unit in every name. */
+.cef__money { position: relative; display: block; }
+.cef__cur {
+  position: absolute; left: 0; top: 0; width: 30px; height: 34px;
+  display: grid; place-items: center;
+  border-right: 1px solid var(--line);
+  color: var(--ink-400); font-size: var(--fs-sm);
+  pointer-events: none;
+}
+.cef__money .field { padding-left: 40px; }
+
+/* A segment with no row this month. Shown, not hidden: the gap is the useful
+   signal, and a card that quietly disappears reads as "nothing to report". */
+.coll__seg.is-empty {
+  cursor: default;
+  border-style: dashed;
+  box-shadow: none;
+  background: var(--surface-sunk);
+}
+.coll__seg.is-empty:hover { transform: none; border-color: var(--line); box-shadow: none; }
+.coll__seg.is-empty .coll__seg-nm,
+.coll__seg.is-empty .coll__seg-share { color: var(--ink-400); }
+.coll__seg-none { margin: var(--s3) 0 0; font-size: var(--fs-xs); color: var(--ink-400); }

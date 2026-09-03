@@ -1,18 +1,19 @@
 /* Band colours. Declared here so the trend line, bars, badges, table and
    distribution all read the same source. Red is the top band only. */
 :root {
-  --band-healthy:  #10b981;
-  --band-normal:   #2563eb;
-  --band-moderate: #f59e0b;
-  --band-high:     #f97316;
-  --band-critical: #ef4444;
+  --band-healthy:  #14b88a;
+  --band-normal:   #4f7df3;
+  --band-moderate: #eaa72c;
+  --band-high:     #f5842c;
+  --band-critical: #e0574f;
 }
 [data-theme='dark'] {
-  --band-healthy:  #10b981;
-  --band-normal:   #3b82f6;
-  --band-moderate: #f59e0b;
-  --band-high:     #f97316;
-  --band-critical: #ef4444;
+  /* Dark still needs its own values — the light set reads as neon on navy. */
+  --band-healthy:  #2ecfa0;
+  --band-normal:   #6d95f0;
+  --band-moderate: #f0b95c;
+  --band-high:     #f79a4d;
+  --band-critical: #ec7168;
 }
 
 .util__track[data-band='healthy'] span  { background: var(--band-healthy); }

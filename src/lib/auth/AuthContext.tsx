@@ -1,6 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { Principal } from '@/lib/permissions/policy';
-import { dataSourceKind } from '@/lib/data/store';
 import { getIdToken, initGoogle, signOutGoogle, hasClientId, storeIdToken } from './googleIdentity';
 import { hydrateDatasets } from '@/config/datasets';
 import { hydrateDepartments } from '@/config/departments';
@@ -11,18 +10,9 @@ interface AuthState {
   status: 'loading' | 'signed_in' | 'signed_out' | 'denied' | 'error';
   error: string | null;
   signOut: () => void;
-  /** Demo mode only — lets a reviewer inspect the UI as each role. */
-  assumeDemoRole: (email: string) => void;
 }
 
 const Ctx = createContext<AuthState | null>(null);
-
-const DEMO_PRINCIPALS: Record<string, Principal> = {
-  'demo.super@stownest.com': { email: 'demo.super@stownest.com', name: 'Demo Super Admin', role: 'super_admin', departments: [], grants: [] },
-  'demo.sales@stownest.com': { email: 'demo.sales@stownest.com', name: 'Demo Sales Admin', role: 'department_admin', departments: ['sales'], grants: [] },
-  'demo.fin@stownest.com': { email: 'demo.fin@stownest.com', name: 'Demo Finance Admin', role: 'department_admin', departments: ['finance', 'collections'], grants: [] },
-  'demo.ops@stownest.com': { email: 'demo.ops@stownest.com', name: 'Demo Ops Employee', role: 'employee', departments: ['operations', 'logistics', 'control_tower'], grants: ['EXPORT'] },
-};
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [principal, setPrincipal] = useState<Principal | null>(null);
@@ -64,11 +54,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (dataSourceKind === 'demo') {
-      setPrincipal(DEMO_PRINCIPALS['demo.super@stownest.com']);
-      setStatus('signed_in');
-      return;
-    }
     if (!hasClientId()) {
       setError('VITE_GOOGLE_CLIENT_ID is not configured for this deployment.');
       setStatus('error');
@@ -82,10 +67,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const value = useMemo<AuthState>(() => ({
     principal, status, error,
     signOut: () => { signOutGoogle(); setPrincipal(null); setStatus('signed_out'); },
-    assumeDemoRole: (email: string) => {
-      if (dataSourceKind !== 'demo') return;
-      setPrincipal(DEMO_PRINCIPALS[email] ?? null);
-    },
   }), [principal, status, error]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
@@ -96,5 +77,3 @@ export function useAuth(): AuthState {
   if (!v) throw new Error('useAuth must be used inside AuthProvider');
   return v;
 }
-
-export { DEMO_PRINCIPALS };

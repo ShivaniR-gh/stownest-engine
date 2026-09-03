@@ -11,302 +11,608 @@ import type { DatasetDef } from './types';
  * the missing column. Nothing is ever estimated to fill a gap.
  * ------------------------------------------------------------------------- */
 
-const STATUS_TONE = {
-  Completed: 'pos', Closed: 'pos', Won: 'pos', Paid: 'pos', Active: 'pos', Delivered: 'pos',
-  Delayed: 'signal', Overdue: 'signal', 'On Hold': 'signal', 'Partially Paid': 'signal',
-  Cancelled: 'neg', Lost: 'neg', Churned: 'neg', Void: 'neg',
-  Pending: 'idle', New: 'idle', Draft: 'idle', Unpaid: 'idle', Vacant: 'idle',
-  Assigned: 'accent', 'In Progress': 'accent', Qualified: 'accent', Occupied: 'accent',
-} as const;
+/** ---------------------------------------------------------------------------
+ * DATASET SCHEMA — the application's definition of its own data.
+ *
+ * This file is the source of truth. It decides what the entry form shows, what
+ * the API accepts, what header row a newly created tab gets, and which sheet
+ * column each value lands in. One list, four uses, so they cannot drift apart.
+ *
+ * The spreadsheet is the storage destination, never the definition. Nothing
+ * here is inferred from what a sheet happens to contain.
+ *
+ * TWO EXCEPTIONS worth knowing before you edit and wonder why nothing changed:
+ *
+ *  1. hydrateDatasets() at the bottom of this file REPLACES everything below
+ *     at sign-in with the live registry from data_sources / field_mappings.
+ *     What is here is the fallback for when that fetch fails.
+ *  2. Departments with a bespoke entry form (collections, marketing) render
+ *     their own fields from their own component. This file still governs what
+ *     the API accepts and where each value lands, but it does not decide what
+ *     the form shows.
+ * ------------------------------------------------------------------------- */
 
 export const DATASETS: DatasetDef[] = [
-  /* ------------------------------- SALES ------------------------------- */
+
+  /* ------------------------------------------------------------------ *
+   * Warehouses — the master list.
+   *
+   * One row per warehouse, no months. This is what fills the dropdown on the
+   * readings form, and the only place total space is edited. Employees hold
+   * VIEW here but not UPDATE, so they can select a warehouse without being
+   * able to change its size.
+   * ------------------------------------------------------------------ */
   {
-    id: 'leads',
-    label: 'Leads',
-    noun: 'lead',
-    department: 'sales',
-    sheetName: 'leads',
-    idColumn: 'lead_id',
-    dateColumn: 'created_at',
+    id: 'warehouses',
+    label: 'Warehouses',
+    noun: 'warehouse',
+    department: 'facility',
+    spreadsheetEnv: 'SHEETS_ID_FACILITY',
+    sheetName: 'Warehouses',
+    createMissingTab: true,
+    idColumn: 'wh_code',
+    titleColumn: 'wh_name',
+    subtitleColumns: ['city', 'location'],
     statusColumn: 'status',
-    titleColumn: 'customer_name',
-    subtitleColumns: ['city', 'source'],
+    defaultSort: { key: 'wh_code', dir: 'asc' },
     auditable: true,
-    defaultSort: { key: 'created_at', dir: 'desc' },
     columns: [
-      { key: 'lead_id', header: 'Lead ID', type: 'id', sheetColumn: 'Lead ID', width: 110, sortable: true },
-      { key: 'created_at', header: 'Created', type: 'date', sheetColumn: 'Created At', width: 100, sortable: true, filterable: true },
-      { key: 'customer_name', header: 'Customer', type: 'text', sheetColumn: 'Customer Name', width: 180, sortable: true, editable: true, required: true },
-      { key: 'phone', header: 'Phone', type: 'phone', sheetColumn: 'Phone', width: 130, editable: true },
-      { key: 'email', header: 'Email', type: 'email', sheetColumn: 'Email', width: 200, editable: true, hiddenByDefault: true },
-      { key: 'city', header: 'City', type: 'enum', sheetColumn: 'City', width: 120, filterable: true, groupable: true, sortable: true, editable: true },
-      { key: 'source', header: 'Source', type: 'enum', sheetColumn: 'Source', width: 130, filterable: true, groupable: true, sortable: true, editable: true },
-      { key: 'service', header: 'Service', type: 'enum', sheetColumn: 'Service', width: 150, filterable: true, groupable: true, editable: true },
-      {
-        key: 'status', header: 'Status', type: 'enum', sheetColumn: 'Status', width: 120,
-        enumValues: ['New', 'Qualified', 'Opportunity', 'Won', 'Lost'],
-        tone: { New: 'idle', Qualified: 'accent', Opportunity: 'accent', Won: 'pos', Lost: 'neg' },
-        filterable: true, groupable: true, sortable: true, editable: true, required: true,
-      },
-      { key: 'owner', header: 'Owner', type: 'enum', sheetColumn: 'Owner', width: 140, filterable: true, groupable: true, sortable: true, editable: true },
-      { key: 'quoted_value', header: 'Quoted', type: 'currency', sheetColumn: 'Quoted Value', width: 110, sortable: true, editable: true, aggregate: 'sum' },
-      { key: 'won_value', header: 'Won value', type: 'currency', sheetColumn: 'Won Value', width: 110, sortable: true, editable: true, aggregate: 'sum' },
-      { key: 'closed_at', header: 'Closed', type: 'date', sheetColumn: 'Closed At', width: 100, sortable: true, editable: true },
-      { key: 'notes', header: 'Notes', type: 'longtext', sheetColumn: 'Notes', editable: true, hiddenByDefault: true },
-    ],
-  },
-  {
-    id: 'customers',
-    label: 'Customers',
-    noun: 'customer',
-    department: 'sales',
-    sheetName: 'customers',
-    idColumn: 'customer_id',
-    dateColumn: 'onboarded_at',
-    statusColumn: 'status',
-    titleColumn: 'name',
-    subtitleColumns: ['city', 'category'],
-    auditable: true,
-    defaultSort: { key: 'onboarded_at', dir: 'desc' },
-    columns: [
-      { key: 'customer_id', header: 'Customer ID', type: 'id', sheetColumn: 'Customer ID', width: 120, sortable: true },
-      { key: 'name', header: 'Name', type: 'text', sheetColumn: 'Name', width: 190, sortable: true, editable: true, required: true },
-      { key: 'phone', header: 'Phone', type: 'phone', sheetColumn: 'Phone', width: 130, editable: true },
-      { key: 'city', header: 'City', type: 'enum', sheetColumn: 'City', width: 120, filterable: true, groupable: true, sortable: true, editable: true },
-      { key: 'category', header: 'Category', type: 'enum', sheetColumn: 'Category', width: 130, filterable: true, groupable: true, editable: true },
-      {
-        key: 'status', header: 'Status', type: 'enum', sheetColumn: 'Status', width: 110,
-        enumValues: ['Active', 'Churned', 'On Hold'],
-        tone: { Active: 'pos', Churned: 'neg', 'On Hold': 'signal' },
-        filterable: true, groupable: true, sortable: true, editable: true, required: true,
-      },
-      { key: 'onboarded_at', header: 'Onboarded', type: 'date', sheetColumn: 'Onboarded At', width: 105, sortable: true, filterable: true },
-      { key: 'churned_at', header: 'Churned', type: 'date', sheetColumn: 'Churned At', width: 100, sortable: true, editable: true },
-      { key: 'monthly_rent', header: 'Monthly rent', type: 'currency', sheetColumn: 'Monthly Rent', width: 120, sortable: true, editable: true, aggregate: 'sum' },
-      { key: 'sqft', header: 'Sq ft', type: 'number', sheetColumn: 'Sq Ft', width: 85, sortable: true, editable: true, aggregate: 'sum' },
-      { key: 'facility', header: 'Facility', type: 'enum', sheetColumn: 'Facility', width: 140, filterable: true, groupable: true, editable: true },
+      { key: 'wh_code', header: 'WH Code', type: 'id', sheetColumn: 'WH Code',
+        required: true, editable: true, unique: true, filterable: true, sortable: true,
+        pattern: '^[A-Za-z0-9:_-]{3,32}$', patternHint: 'PUN:002',
+        help: 'Unique code for this warehouse. Used by every monthly reading.' },
+
+      { key: 'wh_name', header: 'WH Name', type: 'text', sheetColumn: 'WH Name',
+        required: true, editable: true, sortable: true },
+
+      { key: 'city', header: 'City', type: 'enum', sheetColumn: 'City',
+        required: true, editable: true, filterable: true, groupable: true,
+        enumValues: ['Bangalore', 'Chennai', 'Delhi', 'Hyderabad', 'Mumbai', 'Pune'], role: 'location' },
+
+      { key: 'location', header: 'Location', type: 'text', sheetColumn: 'Location',
+        editable: true, filterable: true, groupable: true,
+        help: 'Area within the city, e.g. Alur or Rampura.' },
+
+      { key: 'total_space', header: 'Total Space (sqft)', type: 'number', sheetColumn: 'Total Space',
+        required: true, editable: true, min: 1, aggregate: 'sum', role: 'capacity',
+        help: 'Changing this affects future readings only. Past months keep the figure recorded at the time.' },
+
+      { key: 'status', header: 'Status', type: 'enum', sheetColumn: 'Status',
+        required: true, editable: true, filterable: true,
+        enumValues: ['Active', 'Inactive'], role: 'status',
+        tone: { Active: 'pos', Inactive: 'idle' },
+        help: 'Inactive warehouses stay in past readings but leave the dropdown.' },
     ],
   },
 
-  /* ----------------------------- LOGISTICS ----------------------------- */
+  /* ------------------------------------------------------------------ *
+   * Warehouse space readings — one tab per month.
+   *
+   * The employee supplies two values: which warehouse, and how much of it is
+   * occupied this month. Everything else is filled by the server.
+   *
+   * wh_name / city / location / total_space are SNAPSHOT from the master at
+   * write time rather than joined at read time. If a warehouse is expanded in
+   * June, March must keep showing March's figures — a live join would rewrite
+   * history and reshape every trend chart behind it.
+   * ------------------------------------------------------------------ */
   {
-    id: 'jobs',
-    label: 'Jobs',
-    noun: 'job',
-    department: 'logistics',
-    sheetName: 'jobs',
-    idColumn: 'job_id',
-    dateColumn: 'scheduled_at',
-    statusColumn: 'status',
-    titleColumn: 'job_id',
-    subtitleColumns: ['customer_name', 'city'],
-    auditable: true,
-    defaultSort: { key: 'scheduled_at', dir: 'desc' },
-    columns: [
-      { key: 'job_id', header: 'Job ID', type: 'id', sheetColumn: 'Job ID', width: 110, sortable: true },
-      { key: 'scheduled_at', header: 'Scheduled', type: 'date', sheetColumn: 'Scheduled At', width: 105, sortable: true, filterable: true },
-      { key: 'completed_at', header: 'Completed', type: 'date', sheetColumn: 'Completed At', width: 105, sortable: true, editable: true },
-      { key: 'customer_name', header: 'Customer', type: 'text', sheetColumn: 'Customer Name', width: 170, sortable: true, editable: true, required: true },
-      { key: 'job_type', header: 'Type', type: 'enum', sheetColumn: 'Job Type', width: 140, filterable: true, groupable: true, editable: true },
-      { key: 'city', header: 'City', type: 'enum', sheetColumn: 'City', width: 115, filterable: true, groupable: true, sortable: true, editable: true },
-      {
-        key: 'status', header: 'Status', type: 'enum', sheetColumn: 'Status', width: 120,
-        enumValues: ['Pending', 'Assigned', 'In Progress', 'Completed', 'Delayed', 'Cancelled'],
-        tone: STATUS_TONE as never,
-        filterable: true, groupable: true, sortable: true, editable: true, required: true,
-      },
-      { key: 'vendor', header: 'Vendor', type: 'enum', sheetColumn: 'Vendor', width: 150, filterable: true, groupable: true, sortable: true, editable: true },
-      { key: 'crew_lead', header: 'Crew lead', type: 'enum', sheetColumn: 'Crew Lead', width: 140, filterable: true, groupable: true, editable: true },
-      { key: 'revenue', header: 'Revenue', type: 'currency', sheetColumn: 'Revenue', width: 110, sortable: true, editable: true, aggregate: 'sum' },
-      { key: 'vendor_cost', header: 'Vendor cost', type: 'currency', sheetColumn: 'Vendor Cost', width: 115, sortable: true, editable: true, aggregate: 'sum' },
-      { key: 'other_cost', header: 'Other cost', type: 'currency', sheetColumn: 'Other Cost', width: 110, sortable: true, editable: true, aggregate: 'sum' },
-      { key: 'delay_reason', header: 'Delay reason', type: 'text', sheetColumn: 'Delay Reason', width: 180, editable: true, hiddenByDefault: true },
-    ],
-  },
-  {
-    id: 'vendors',
-    label: 'Vendors',
-    noun: 'vendor',
-    department: 'logistics',
-    sheetName: 'vendors',
-    idColumn: 'vendor_id',
-    statusColumn: 'status',
-    titleColumn: 'name',
+    id: 'warehouse_readings',
+    label: 'Warehouse Space',
+    noun: 'reading',
+    department: 'facility',
+    spreadsheetEnv: 'SHEETS_ID_FACILITY',
+    sheetName: 'Readings',
+    tabStrategy: 'monthly',
+    tabPrefix: 'Readings',
+    monthsBack: 24,
+    monthsForward: 1,
+    createMissingTab: true,
+    idColumn: 'wh_code',
+    titleColumn: 'wh_name',
     subtitleColumns: ['city'],
+    dateColumn: 'recorded_on',
+    defaultSort: { key: 'city', dir: 'asc' },
     auditable: true,
     columns: [
-      { key: 'vendor_id', header: 'Vendor ID', type: 'id', sheetColumn: 'Vendor ID', width: 110, sortable: true },
-      { key: 'name', header: 'Name', type: 'text', sheetColumn: 'Name', width: 190, sortable: true, editable: true, required: true },
-      { key: 'city', header: 'City', type: 'enum', sheetColumn: 'City', width: 120, filterable: true, groupable: true, editable: true },
-      { key: 'contact', header: 'Contact', type: 'phone', sheetColumn: 'Contact', width: 130, editable: true },
-      {
-        key: 'status', header: 'Status', type: 'enum', sheetColumn: 'Status', width: 110,
-        enumValues: ['Active', 'On Hold', 'Inactive'],
-        tone: { Active: 'pos', 'On Hold': 'signal', Inactive: 'idle' },
-        filterable: true, editable: true,
+      // --- entered by the user ---
+      { key: 'wh_code', header: 'WH Code', type: 'id', sheetColumn: 'WH Code',
+        required: true, editable: true, unique: true, filterable: true, sortable: true,
+        help: 'Chosen from the warehouse list. One reading per warehouse per month.' },
+
+      { key: 'occupied_space', header: 'Occupied Space (sqft)', type: 'number', sheetColumn: 'Occupied Space',
+        required: true, editable: true, min: 0, aggregate: 'sum', role: 'occupied',
+        help: 'Space in use this month. Cannot exceed the warehouse total.' },
+
+      { key: 'recorded_on', header: 'Recorded On', type: 'date', sheetColumn: 'Recorded On',
+        editable: true, role: 'date',
+        help: 'Defaults to today if left blank.' },
+
+      // --- filled by the server (api/_lib/derive.ts) ---
+      // Written into the row as well as computed, so the tab reads properly
+      // when someone opens the spreadsheet directly.
+      { key: 'wh_name', header: 'WH Name', type: 'text', sheetColumn: 'WH Name',
+        derived: true, sortable: true },
+
+      { key: 'city', header: 'City', type: 'enum', sheetColumn: 'City',
+        derived: true, filterable: true, groupable: true,
+        enumValues: ['Bangalore', 'Chennai', 'Delhi', 'Hyderabad', 'Mumbai', 'Pune'], role: 'location' },
+
+      { key: 'location', header: 'Location', type: 'text', sheetColumn: 'Location',
+        derived: true, filterable: true, groupable: true },
+
+      { key: 'total_space', header: 'Total Space (sqft)', type: 'number', sheetColumn: 'Total Space',
+        derived: true, aggregate: 'sum', role: 'capacity',
+        help: 'Snapshot of the warehouse total at the time this reading was entered.' },
+
+      { key: 'available_space', header: 'Available Space (sqft)', type: 'number', sheetColumn: 'Available Space',
+        derived: true, aggregate: 'sum',
+        help: 'Total minus occupied. Computed, never entered.' },
+
+      { key: 'utilisation_pct', header: 'Utilisation %', type: 'percent', sheetColumn: 'Utilisation %',
+        derived: true },
+
+      { key: 'entered_by', header: 'Entered By', type: 'email', sheetColumn: 'Entered By',
+        derived: true,
+        help: 'Every write is by the service account, so this is the only record of who submitted it.' },
+    ],
+    crossFieldRules: [
+      (v) => {
+        const occ = Number(String(v.occupied_space ?? '').replace(/[,\s]/g, ''));
+        return occ < 0 ? { key: 'occupied_space', message: 'Occupied space cannot be negative.' } : null;
       },
-      { key: 'rate_card', header: 'Rate card', type: 'currency', sheetColumn: 'Rate Card', width: 110, sortable: true, editable: true },
     ],
   },
 
-  /* ----------------------------- WAREHOUSE ----------------------------- */
+  /* ------------------------------------------------------------------ *
+   * Collections — monthly summary.
+   *
+   * One row per month. The team's working sheet is transposed (months across
+   * columns, metrics down rows), which the platform cannot read: row 1 must be
+   * headers and every later row a record. Point sheetName at a helper tab that
+   * TRANSPOSE()s the working grid, so the team keeps editing the layout they
+   * already use and the app reads a shape it understands.
+   *
+   * `header` is kept IDENTICAL to `sheetColumn` throughout this dataset, at the
+   * team's request. The reason is not tidiness: the B2C report has its own
+   * "Pending Amount" covering unpaid invoices outstanding, a different figure
+   * from "Pending collection amount" here, and the two were being read as the
+   * same number. Sharing one vocabulary with the sheet keeps them visibly
+   * distinct with no mapping layer to drift.
+   * ------------------------------------------------------------------ */
   {
-    id: 'space',
-    label: 'Space inventory',
-    noun: 'unit',
-    department: 'warehouse',
-    sheetName: 'space',
-    idColumn: 'unit_id',
-    statusColumn: 'status',
-    titleColumn: 'unit_id',
-    subtitleColumns: ['facility', 'unit_type'],
+    id: 'collections_monthly',
+    label: 'Collection Summary',
+    icon: 'trending',
+    businessLine: 'B2C',
+    noun: 'month',
+    department: 'collections',
+    spreadsheetEnv: 'SHEETS_ID_COLLECTIONS',
+    sheetName: 'monthly_summary',
+    idColumn: 'month',
+    titleColumn: 'month',
+    dateColumn: 'month',
+    transposable: true,
+    combinedEntry: true,
+    entryForm: 'collections',
+    defaultSort: { key: 'month', dir: 'desc' },
     auditable: true,
-    defaultSort: { key: 'facility', dir: 'asc' },
     columns: [
-      { key: 'unit_id', header: 'Unit', type: 'id', sheetColumn: 'Unit ID', width: 100, sortable: true },
-      { key: 'facility', header: 'Facility', type: 'enum', sheetColumn: 'Facility', width: 160, filterable: true, groupable: true, sortable: true, editable: true, required: true },
-      { key: 'city', header: 'City', type: 'enum', sheetColumn: 'City', width: 115, filterable: true, groupable: true, sortable: true, editable: true },
-      { key: 'unit_type', header: 'Type', type: 'enum', sheetColumn: 'Unit Type', width: 130, filterable: true, groupable: true, editable: true },
-      { key: 'sqft', header: 'Sq ft', type: 'number', sheetColumn: 'Sq Ft', width: 85, sortable: true, editable: true, aggregate: 'sum' },
-      {
-        key: 'status', header: 'Status', type: 'enum', sheetColumn: 'Status', width: 110,
-        enumValues: ['Occupied', 'Vacant', 'Blocked', 'Maintenance'],
-        tone: { Occupied: 'accent', Vacant: 'idle', Blocked: 'signal', Maintenance: 'signal' },
-        filterable: true, groupable: true, sortable: true, editable: true, required: true,
-      },
-      { key: 'customer_name', header: 'Occupied by', type: 'text', sheetColumn: 'Customer Name', width: 170, editable: true },
-      { key: 'monthly_rent', header: 'Monthly rent', type: 'currency', sheetColumn: 'Monthly Rent', width: 120, sortable: true, editable: true, aggregate: 'sum' },
-      { key: 'occupied_since', header: 'Since', type: 'date', sheetColumn: 'Occupied Since', width: 100, sortable: true, editable: true },
-    ],
-  },
-  {
-    id: 'movements',
-    label: 'Storage movement',
-    noun: 'movement',
-    department: 'warehouse',
-    sheetName: 'movements',
-    idColumn: 'movement_id',
-    dateColumn: 'moved_at',
-    statusColumn: 'direction',
-    titleColumn: 'movement_id',
-    subtitleColumns: ['facility', 'direction'],
-    auditable: true,
-    defaultSort: { key: 'moved_at', dir: 'desc' },
-    columns: [
-      { key: 'movement_id', header: 'Movement', type: 'id', sheetColumn: 'Movement ID', width: 120, sortable: true },
-      { key: 'moved_at', header: 'Date', type: 'date', sheetColumn: 'Moved At', width: 100, sortable: true, filterable: true },
-      {
-        key: 'direction', header: 'Direction', type: 'enum', sheetColumn: 'Direction', width: 110,
-        enumValues: ['Inward', 'Outward'],
-        tone: { Inward: 'pos', Outward: 'signal' },
-        filterable: true, groupable: true, sortable: true, editable: true, required: true,
-      },
-      { key: 'facility', header: 'Facility', type: 'enum', sheetColumn: 'Facility', width: 160, filterable: true, groupable: true, sortable: true, editable: true },
-      { key: 'customer_name', header: 'Customer', type: 'text', sheetColumn: 'Customer Name', width: 170, editable: true },
-      { key: 'sqft', header: 'Sq ft', type: 'number', sheetColumn: 'Sq Ft', width: 85, sortable: true, editable: true, aggregate: 'sum' },
-      { key: 'unit_id', header: 'Unit', type: 'text', sheetColumn: 'Unit ID', width: 100, editable: true },
+      { key: 'month', header: 'Month', type: 'date', sheetColumn: 'Month',
+        required: true, filterable: true, sortable: true, role: 'date',
+        help: 'First of the month. One row per month.' },
+
+      { key: 'collection_amount', header: 'Collection Amount', type: 'currency',
+        sheetColumn: 'Collection Amount', aggregate: 'sum', editable: true, min: 0,
+        help: 'Total collected against all outstanding, not only this month.' },
+
+      { key: 'collection_month', header: 'Collection amount for the month', type: 'currency',
+        sheetColumn: 'Collection amount for the month', aggregate: 'sum', editable: true, min: 0,
+        help: 'Received against this month only, not the running total.' },
+
+      { key: 'raised_amount', header: 'Raised Invoice amount', type: 'currency',
+        sheetColumn: 'Raised Invoice amount', aggregate: 'sum', role: 'amount',
+        editable: true, min: 0 },
+
+      /* Entered by the team, not computed. It normally equals Raised minus
+         Collection amount for the month, and the entry form warns when an
+         entered figure differs from that by more than 1% — but it does not
+         block, because an override can be legitimate. */
+      { key: 'pending_amount', header: 'Pending collection amount', type: 'currency',
+        sheetColumn: 'Pending collection amount', aggregate: 'sum',
+        editable: true, min: 0,
+        help: 'Entered by the team. Normally Raised Invoice amount minus Collection amount for the month.' },
+
+      /* Gap % divides by Raised Invoice amount, matching the sheet's row 7
+         (=C6/C5*100). Verified against the columns that already hold values:
+         March 6.678613, April 7.426019, May 7.778137 all reproduce to six
+         decimals. Dividing by Collection Amount gives 5.10 / 6.54 / 6.36 for
+         those months, which matches nothing in the sheet. */
+      { key: 'gap_pct', header: 'Gap in %', type: 'percent', sheetColumn: 'Gap in %',
+        derived: true, help: 'Pending collection amount over Raised Invoice amount. Computed.' },
+
+      { key: 'pending_to_date', header: 'Total Pending Invoice amount till date', type: 'currency',
+        sheetColumn: 'Total Pending Invoice amount till date', editable: true, min: 0,
+        help: 'Cumulative, not this month alone.' },
+
+      /* Comparison is deliberately NOT a column here. It is a relationship
+         between two months, so storing it makes every stored value wrong the
+         moment a month is inserted before it. The app computes it on read from
+         the rows in view, where all the months are present and sortable. The
+         sheet keeps its own Comparison column for people reading the sheet. */
+
+      /* ---------------------------------------------------------------- *
+       * Source of revenue, one set of columns per segment.
+       *
+       * Held on the month's own row rather than in a second tab: a month is
+       * then a single write, so it cannot be half saved, and the three
+       * segments cannot drift out of step with the totals above them.
+       *
+       * The cost is that a new line of business is a schema change here plus
+       * five new sheet columns, not a row someone types. That is the right
+       * trade while the three segments are fixed.
+       *
+       * Share in revenue divides by Collection amount for the month, matching
+       * the sheet's row 18 (=C15/C4*100). Storage is the remainder of that
+       * same figure, so it is also what makes the three shares sum to 100%.
+       * ---------------------------------------------------------------- */
+      /* --- Pickup --- */
+      { key: 'pk_raised', header: 'Pickup Raised Invoices Amount', type: 'currency',
+        sheetColumn: 'Pickup Raised Invoices Amount', aggregate: 'sum', editable: true, min: 0 },
+      { key: 'pk_collected', header: 'Pickup Collection Amount', type: 'currency',
+        sheetColumn: 'Pickup Collection Amount', aggregate: 'sum', editable: true, min: 0 },
+      /* Entered by the team, matching pending_amount above. Delivery and
+         storage remain computed — flip them the same way if the team wants
+         all three segments to behave alike in the form. */
+      { key: 'pk_gap', header: 'Pickup Gap in Rs.', type: 'currency',
+        sheetColumn: 'Pickup Gap in Rs.', aggregate: 'sum',
+        editable: true, min: 0,
+        help: 'Entered by the team. Normally Pickup Raised minus Pickup Collection.' },
+      { key: 'pk_gap_pct', header: 'Pickup Gap in %', type: 'percent',
+        sheetColumn: 'Pickup Gap in %', derived: true },
+      { key: 'pk_share', header: 'Pickup Share in revenue', type: 'percent',
+        sheetColumn: 'Pickup Share in revenue', derived: true },
+      /* --- Delivery --- */
+      { key: 'dl_raised', header: 'Delivery Raised Invoices Amount', type: 'currency',
+        sheetColumn: 'Delivery Raised Invoices Amount', aggregate: 'sum', editable: true, min: 0 },
+      { key: 'dl_collected', header: 'Delivery Collection Amount', type: 'currency',
+        sheetColumn: 'Delivery Collection Amount', aggregate: 'sum', editable: true, min: 0 },
+      { key: 'dl_gap', header: 'Delivery Gap in Rs.', type: 'currency',
+        sheetColumn: 'Delivery Gap in Rs.', aggregate: 'sum', derived: true },
+      { key: 'dl_gap_pct', header: 'Delivery Gap in %', type: 'percent',
+        sheetColumn: 'Delivery Gap in %', derived: true },
+      { key: 'dl_share', header: 'Delivery Share in revenue', type: 'percent',
+        sheetColumn: 'Delivery Share in revenue', derived: true },
+      /* --- Storage --- */
+      { key: 'st_raised', header: 'Storage Raised Invoices Amount', type: 'currency',
+        sheetColumn: 'Storage Raised Invoices Amount', aggregate: 'sum', derived: true },
+      { key: 'st_collected', header: 'Storage Collection Amount', type: 'currency',
+        sheetColumn: 'Storage Collection Amount', aggregate: 'sum', derived: true },
+      { key: 'st_gap', header: 'Storage Gap in Rs.', type: 'currency',
+        sheetColumn: 'Storage Gap in Rs.', aggregate: 'sum', derived: true },
+      { key: 'st_gap_pct', header: 'Storage Gap in %', type: 'percent',
+        sheetColumn: 'Storage Gap in %', derived: true },
+      { key: 'st_share', header: 'Storage Share in revenue', type: 'percent',
+        sheetColumn: 'Storage Share in revenue', derived: true },
     ],
   },
 
-  /* ----------------------------- OPERATIONS ---------------------------- */
+/* =========================================================================
+ * INSERT INTO src/config/datasets.ts, directly after the collections_monthly
+ * object (after its closing `},`) and before the marketing comment block.
+ * ========================================================================= */
+
+  /* ------------------------------------------------------------------ *
+   * Collections — B2C monthly report.
+   *
+   * The two report tables the team circulates: a customer/amount summary and
+   * a per-city invoice/collection split. One row per month holds both, so a
+   * month is a single write and the city figures cannot drift out of step
+   * with the summary above them — the same shape, and the same reason, as
+   * the revenue segments on collections_monthly.
+   *
+   * `header` matches `sheetColumn` and both match the report images exactly,
+   * including "Receivables Amount (>60 Days)" with its plural and its
+   * bracket. The report is circulated as-is to people outside this app, and a
+   * label that reads differently here is a label someone will query.
+   *
+   * TOTALS ARE DERIVED, not entered. Total Raised Amount is the sum of the
+   * city invoice figures and Total Collection Amount the sum of the city
+   * collections — the source images show 2.33Cr and 2.39Cr in both places.
+   * Typing them again is one more chance for the two halves of a report to
+   * contradict each other in front of management.
+   *
+   * Cities are column groups rather than rows because a month must stay one
+   * write. The cost is that a ninth city is a schema change here plus two
+   * sheet columns. That is the right trade while the list is stable; if
+   * cities start moving, this becomes a per-city-row dataset keyed on
+   * month + city instead.
+   * ------------------------------------------------------------------ */
   {
-    id: 'tasks',
-    label: 'Operations tasks',
-    noun: 'task',
-    department: 'operations',
-    sheetName: 'tasks',
-    idColumn: 'task_id',
-    dateColumn: 'due_at',
-    statusColumn: 'status',
-    titleColumn: 'title',
-    subtitleColumns: ['assignee', 'city'],
+    id: 'collections_b2c_report',
+    label: 'Monthly Report',
+    noun: 'month',
+    department: 'collections',
+    businessLine: 'B2C',
+    spreadsheetEnv: 'SHEETS_ID_COLLECTIONS',
+    // Created on first write if absent. Rename the tab in Sheets and change
+    // this line with it; nothing else in the app knows the name.
+    sheetName: 'b2c_monthly_report',
+    createMissingTab: true,
+    idColumn: 'month',
+    titleColumn: 'month',
+    dateColumn: 'month',
+    combinedEntry: true,
+    entryForm: 'b2c_report',
+    defaultSort: { key: 'month', dir: 'desc' },
     auditable: true,
-    defaultSort: { key: 'due_at', dir: 'asc' },
     columns: [
-      { key: 'task_id', header: 'Task', type: 'id', sheetColumn: 'Task ID', width: 105, sortable: true },
-      { key: 'title', header: 'Task', type: 'text', sheetColumn: 'Title', width: 240, sortable: true, editable: true, required: true },
-      { key: 'category', header: 'Category', type: 'enum', sheetColumn: 'Category', width: 140, filterable: true, groupable: true, editable: true },
-      { key: 'due_at', header: 'Due', type: 'date', sheetColumn: 'Due At', width: 100, sortable: true, filterable: true, editable: true },
-      { key: 'completed_at', header: 'Completed', type: 'date', sheetColumn: 'Completed At', width: 105, sortable: true, editable: true },
-      {
-        key: 'status', header: 'Status', type: 'enum', sheetColumn: 'Status', width: 120,
-        enumValues: ['Pending', 'In Progress', 'Completed', 'Delayed', 'Cancelled'],
-        tone: STATUS_TONE as never,
-        filterable: true, groupable: true, sortable: true, editable: true, required: true,
-      },
-      { key: 'assignee', header: 'Assignee', type: 'enum', sheetColumn: 'Assignee', width: 150, filterable: true, groupable: true, sortable: true, editable: true },
-      { key: 'city', header: 'City', type: 'enum', sheetColumn: 'City', width: 115, filterable: true, groupable: true, editable: true },
-      { key: 'priority', header: 'Priority', type: 'enum', sheetColumn: 'Priority', width: 100,
-        enumValues: ['Low', 'Medium', 'High'], tone: { High: 'signal', Medium: 'idle', Low: 'idle' },
-        filterable: true, groupable: true, editable: true },
+      { key: 'month', header: 'Month', type: 'date', sheetColumn: 'Month',
+        required: true, filterable: true, sortable: true, unique: true, role: 'date',
+        help: 'First of the month. One row per month.' },
+
+      /* --- customer & amount summary --- */
+      { key: 'customers_raised', header: 'Total Customers Raised', type: 'number',
+        sheetColumn: 'Total Customers Raised',
+        editable: true, min: 0, aggregate: 'sum', role: 'quantity' },
+
+      { key: 'raised_amount', header: 'Total Raised Amount', type: 'currency',
+        sheetColumn: 'Total Raised Amount', aggregate: 'sum', role: 'amount',
+        derived: true,
+        help: 'Sum of the city invoice amounts. Computed, never entered.' },
+
+      { key: 'collected_customers', header: 'Total Collected Customers', type: 'number',
+        sheetColumn: 'Total Collected Customers',
+        editable: true, min: 0, aggregate: 'sum', role: 'quantity',
+        help: 'Can exceed customers raised — collections land against earlier months too.' },
+
+      { key: 'collection_amount', header: 'Total Collection Amount', type: 'currency',
+        sheetColumn: 'Total Collection Amount', aggregate: 'sum',
+        derived: true,
+        help: 'Sum of the city collection amounts. Computed, never entered.' },
+
+      { key: 'pending_customers', header: 'Pending Customers', type: 'number',
+        sheetColumn: 'Pending Customers',
+        editable: true, min: 0, aggregate: 'sum', role: 'quantity' },
+
+      /* Deliberately NOT the same figure as "Pending collection amount" on
+         collections_monthly. That one is this month's raised less this
+         month's collected; this is the value of invoices still unpaid across
+         all months. Both are correct and they will not match — which is why
+         each keeps the name its own report uses. */
+      { key: 'pending_amount', header: 'Pending Amount', type: 'currency',
+        sheetColumn: 'Pending Amount', aggregate: 'sum',
+        editable: true, min: 0,
+        help: 'Value of unpaid invoices outstanding. Not the monthly raised-minus-collected gap.' },
+
+      { key: 'receivable_customers_60', header: 'Receivable Customers (>60 Days)', type: 'number',
+        sheetColumn: 'Receivable Customers (>60 Days)',
+        editable: true, min: 0, aggregate: 'sum', role: 'quantity' },
+
+      { key: 'receivables_amount_60', header: 'Receivables Amount (>60 Days)', type: 'currency',
+        sheetColumn: 'Receivables Amount (>60 Days)', aggregate: 'sum',
+        editable: true, min: 0 },
+
+      /* --- per city: invoice + collection --- */
+      { key: 'blr_invoice', header: 'Bangalore Invoice Amount', type: 'currency',
+        sheetColumn: 'Bangalore Invoice Amount', aggregate: 'sum', editable: true, min: 0 },
+      { key: 'blr_collection', header: 'Bangalore Collection Amount', type: 'currency',
+        sheetColumn: 'Bangalore Collection Amount', aggregate: 'sum', editable: true, min: 0 },
+
+      { key: 'hyd_invoice', header: 'Hyderabad Invoice Amount', type: 'currency',
+        sheetColumn: 'Hyderabad Invoice Amount', aggregate: 'sum', editable: true, min: 0 },
+      { key: 'hyd_collection', header: 'Hyderabad Collection Amount', type: 'currency',
+        sheetColumn: 'Hyderabad Collection Amount', aggregate: 'sum', editable: true, min: 0 },
+
+      { key: 'che_invoice', header: 'Chennai Invoice Amount', type: 'currency',
+        sheetColumn: 'Chennai Invoice Amount', aggregate: 'sum', editable: true, min: 0 },
+      { key: 'che_collection', header: 'Chennai Collection Amount', type: 'currency',
+        sheetColumn: 'Chennai Collection Amount', aggregate: 'sum', editable: true, min: 0 },
+
+      { key: 'pun_invoice', header: 'Pune Invoice Amount', type: 'currency',
+        sheetColumn: 'Pune Invoice Amount', aggregate: 'sum', editable: true, min: 0 },
+      { key: 'pun_collection', header: 'Pune Collection Amount', type: 'currency',
+        sheetColumn: 'Pune Collection Amount', aggregate: 'sum', editable: true, min: 0 },
+
+      { key: 'mum_invoice', header: 'Mumbai Invoice Amount', type: 'currency',
+        sheetColumn: 'Mumbai Invoice Amount', aggregate: 'sum', editable: true, min: 0 },
+      { key: 'mum_collection', header: 'Mumbai Collection Amount', type: 'currency',
+        sheetColumn: 'Mumbai Collection Amount', aggregate: 'sum', editable: true, min: 0 },
+
+      { key: 'del_invoice', header: 'Delhi Invoice Amount', type: 'currency',
+        sheetColumn: 'Delhi Invoice Amount', aggregate: 'sum', editable: true, min: 0 },
+      { key: 'del_collection', header: 'Delhi Collection Amount', type: 'currency',
+        sheetColumn: 'Delhi Collection Amount', aggregate: 'sum', editable: true, min: 0 },
+
+      { key: 'kol_invoice', header: 'Kolkata Invoice Amount', type: 'currency',
+        sheetColumn: 'Kolkata Invoice Amount', aggregate: 'sum', editable: true, min: 0 },
+      { key: 'kol_collection', header: 'Kolkata Collection Amount', type: 'currency',
+        sheetColumn: 'Kolkata Collection Amount', aggregate: 'sum', editable: true, min: 0 },
+
+      { key: 'gur_invoice', header: 'Gurugram Invoice Amount', type: 'currency',
+        sheetColumn: 'Gurugram Invoice Amount', aggregate: 'sum', editable: true, min: 0 },
+      { key: 'gur_collection', header: 'Gurugram Collection Amount', type: 'currency',
+        sheetColumn: 'Gurugram Collection Amount', aggregate: 'sum', editable: true, min: 0 },
+
+      { key: 'entered_by', header: 'Entered By', type: 'email', sheetColumn: 'Entered By',
+        derived: true, hiddenByDefault: true },
     ],
   },
 
-  /* ------------------------ FINANCE / COLLECTIONS ---------------------- */
+
+  /* ------------------------------------------------------------------ *
+   * Marketing — monthly lead performance.
+   *
+   * One row per month, three categories as column groups on that row. The
+   * same shape collections uses for its revenue segments, and for the same
+   * reason: a month is then a single write, so the three categories cannot
+   * drift out of step with the totals above them.
+   *
+   * Totals are derived, never entered. The mockup shows Total Leads beside
+   * Valid and Invalid, and a person retyping a sum is a person who can make
+   * it disagree with the two numbers next to it.
+   * ------------------------------------------------------------------ */
   {
-    id: 'invoices',
-    label: 'Invoices',
-    noun: 'invoice',
-    department: 'finance',
-    sheetName: 'invoices',
-    idColumn: 'invoice_id',
-    dateColumn: 'issued_at',
-    statusColumn: 'payment_status',
-    titleColumn: 'invoice_id',
-    subtitleColumns: ['customer_name', 'payment_status'],
+    id: 'marketing_leads',
+    label: 'Lead Performance',
+    noun: 'month',
+    department: 'marketing',
+    spreadsheetEnv: 'SHEETS_ID_MARKETING',
+    sheetName: 'lead_performance',
+    createMissingTab: true,
+    idColumn: 'month',
+    titleColumn: 'month',
+    dateColumn: 'month',
+    combinedEntry: true,
+    entryForm: 'marketing',
+    defaultSort: { key: 'month', dir: 'desc' },
     auditable: true,
-    defaultSort: { key: 'issued_at', dir: 'desc' },
     columns: [
-      { key: 'invoice_id', header: 'Invoice', type: 'id', sheetColumn: 'Invoice ID', width: 120, sortable: true },
-      { key: 'issued_at', header: 'Issued', type: 'date', sheetColumn: 'Issued At', width: 100, sortable: true, filterable: true },
-      { key: 'due_at', header: 'Due', type: 'date', sheetColumn: 'Due At', width: 100, sortable: true },
-      { key: 'customer_name', header: 'Customer', type: 'text', sheetColumn: 'Customer Name', width: 180, sortable: true, editable: true, required: true },
-      { key: 'city', header: 'City', type: 'enum', sheetColumn: 'City', width: 115, filterable: true, groupable: true, editable: true },
-      { key: 'revenue_line', header: 'Revenue line', type: 'enum', sheetColumn: 'Revenue Line', width: 150, filterable: true, groupable: true, editable: true,
-        help: 'Storage vs moving vs packing. Drives the revenue mix chart.' },
-      { key: 'amount', header: 'Invoiced', type: 'currency', sheetColumn: 'Amount', width: 115, sortable: true, editable: true, aggregate: 'sum',
-        help: 'Gross invoiced value. This is revenue, not cash.' },
-      { key: 'amount_paid', header: 'Received', type: 'currency', sheetColumn: 'Amount Paid', width: 115, sortable: true, editable: true, aggregate: 'sum',
-        help: 'Cash actually received against this invoice. This is collections.' },
-      {
-        key: 'payment_status', header: 'Payment', type: 'enum', sheetColumn: 'Payment Status', width: 130,
-        enumValues: ['Paid', 'Partially Paid', 'Unpaid', 'Overdue', 'Void'],
-        tone: { Paid: 'pos', 'Partially Paid': 'signal', Unpaid: 'idle', Overdue: 'signal', Void: 'neg' },
-        filterable: true, groupable: true, sortable: true, editable: true, required: true,
-      },
-      { key: 'paid_at', header: 'Paid on', type: 'date', sheetColumn: 'Paid At', width: 100, sortable: true, editable: true },
-      { key: 'mode', header: 'Mode', type: 'enum', sheetColumn: 'Payment Mode', width: 110, filterable: true, groupable: true, editable: true, hiddenByDefault: true },
-    ],
-  },
-  {
-    id: 'expenses',
-    label: 'Expenses',
-    noun: 'expense',
-    department: 'finance',
-    sheetName: 'expenses',
-    idColumn: 'expense_id',
-    dateColumn: 'booked_at',
-    statusColumn: 'category',
-    titleColumn: 'description',
-    subtitleColumns: ['category', 'department'],
-    auditable: true,
-    defaultSort: { key: 'booked_at', dir: 'desc' },
-    columns: [
-      { key: 'expense_id', header: 'Expense', type: 'id', sheetColumn: 'Expense ID', width: 115, sortable: true },
-      { key: 'booked_at', header: 'Booked', type: 'date', sheetColumn: 'Booked At', width: 100, sortable: true, filterable: true },
-      { key: 'description', header: 'Description', type: 'text', sheetColumn: 'Description', width: 240, sortable: true, editable: true, required: true },
-      { key: 'category', header: 'Category', type: 'enum', sheetColumn: 'Category', width: 150, filterable: true, groupable: true, sortable: true, editable: true, required: true },
-      { key: 'department', header: 'Department', type: 'enum', sheetColumn: 'Department', width: 140, filterable: true, groupable: true, sortable: true, editable: true },
-      { key: 'city', header: 'City', type: 'enum', sheetColumn: 'City', width: 115, filterable: true, groupable: true, editable: true },
-      { key: 'amount', header: 'Amount', type: 'currency', sheetColumn: 'Amount', width: 115, sortable: true, editable: true, aggregate: 'sum' },
-      // Marketing spend is what CPL and CAC need. Until a real spend feed exists,
-      // this stays unmapped and both metrics correctly report themselves unavailable.
-      { key: 'is_marketing_spend', header: 'Marketing spend', type: 'boolean', /* sheetColumn: 'Is Marketing Spend' */ width: 130, filterable: true },
+      { key: 'month', header: 'Month', type: 'date', sheetColumn: 'Month',
+        required: true, filterable: true, sortable: true, unique: true, role: 'date',
+        help: 'First of the month. One row per month.' },
+
+      /* --- B2B --- */
+      { key: 'b2b_valid', header: 'B2B Valid Leads', type: 'number', sheetColumn: 'B2B Valid Leads',
+        editable: true, min: 0, aggregate: 'sum', role: 'quantity' },
+      { key: 'b2b_invalid', header: 'B2B Invalid Leads', type: 'number', sheetColumn: 'B2B Invalid Leads',
+        editable: true, min: 0, aggregate: 'sum', role: 'quantity' },
+      { key: 'b2b_total', header: 'B2B Total Leads', type: 'number', sheetColumn: 'B2B Total Leads',
+        derived: true, aggregate: 'sum',
+        help: 'Valid plus invalid. Computed, never entered.' },
+
+      /* --- B2C --- */
+      { key: 'b2c_valid', header: 'B2C Valid Leads', type: 'number', sheetColumn: 'B2C Valid Leads',
+        editable: true, min: 0, aggregate: 'sum', role: 'quantity' },
+      { key: 'b2c_invalid', header: 'B2C Invalid Leads', type: 'number', sheetColumn: 'B2C Invalid Leads',
+        editable: true, min: 0, aggregate: 'sum', role: 'quantity' },
+      { key: 'b2c_total', header: 'B2C Total Leads', type: 'number', sheetColumn: 'B2C Total Leads',
+        derived: true, aggregate: 'sum' },
+
+      /* --- Packing & Moving --- */
+      { key: 'pm_valid', header: 'P&M Valid Leads', type: 'number', sheetColumn: 'P&M Valid Leads',
+        editable: true, min: 0, aggregate: 'sum', role: 'quantity' },
+      { key: 'pm_invalid', header: 'P&M Invalid Leads', type: 'number', sheetColumn: 'P&M Invalid Leads',
+        editable: true, min: 0, aggregate: 'sum', role: 'quantity' },
+      { key: 'pm_total', header: 'P&M Total Leads', type: 'number', sheetColumn: 'P&M Total Leads',
+        derived: true, aggregate: 'sum' },
+
+      /* --- month roll-up --- */
+      { key: 'total_valid', header: 'Total Valid Leads', type: 'number', sheetColumn: 'Total Valid Leads',
+        derived: true, aggregate: 'sum' },
+      { key: 'total_invalid', header: 'Total Invalid Leads', type: 'number', sheetColumn: 'Total Invalid Leads',
+        derived: true, aggregate: 'sum' },
+      { key: 'total_leads', header: 'Total Leads', type: 'number', sheetColumn: 'Total Leads',
+        derived: true, aggregate: 'sum' },
+      { key: 'valid_rate_pct', header: 'Valid Lead Rate', type: 'percent', sheetColumn: 'Valid Lead Rate',
+        derived: true, help: 'Valid leads as a share of all leads received.' },
+
+      { key: 'entered_by', header: 'Entered By', type: 'email', sheetColumn: 'Entered By',
+        derived: true, hiddenByDefault: true },
     ],
   },
 
-  /* --------------------------- ADMINISTRATION -------------------------- */
+  /* ------------------------------------------------------------------ *
+   * Marketing — acquisition and cost.
+   *
+   * Only two things per category are ENTERED here: what was spent, and how
+   * many customers it produced. CPL, CPVL, CAC and lead-to-customer rate are
+   * all arithmetic over that spend and the lead counts in marketing_leads,
+   * so they are derived server-side against the matching month.
+   *
+   * Storing them as typed columns instead would let them go stale the moment
+   * someone corrects a lead count — the figures would still render, they
+   * would just quietly be wrong, which is worse than "Data unavailable".
+   * ------------------------------------------------------------------ */
+  {
+    id: 'marketing_acquisition',
+    label: 'Acquisition & Cost',
+    noun: 'month',
+    department: 'marketing',
+    spreadsheetEnv: 'SHEETS_ID_MARKETING',
+    sheetName: 'acquisition_cost',
+    createMissingTab: true,
+    idColumn: 'month',
+    titleColumn: 'month',
+    dateColumn: 'month',
+    combinedEntry: true,
+    entryForm: 'marketing',
+    defaultSort: { key: 'month', dir: 'desc' },
+    auditable: true,
+    columns: [
+      { key: 'month', header: 'Month', type: 'date', sheetColumn: 'Month',
+        required: true, filterable: true, sortable: true, unique: true, role: 'date',
+        help: 'Must match a month already present in Lead Performance.' },
+
+      /* --- entered: spend --- */
+      /* --- entered: spend, once for the month ---
+       *
+       * Not split by category, because it cannot be measured that way. The ad
+       * accounts report a single account-level cost and the campaigns are not
+       * named per line of business, so any three-way split would be a rule
+       * someone invented rather than a figure anyone observed.
+       *
+       * Splitting by lead share was the obvious candidate and is wrong: it
+       * assumes every category costs the same per lead, which forces all three
+       * CPLs to come out identical. The reference sheet shows them at 315 /
+       * 254 / 137 for the same month, so that assumption is already known to
+       * be false. Recording one honest total beats three invented parts. */
+      { key: 'total_spend', header: 'Total Marketing Spend', type: 'currency',
+        sheetColumn: 'Total Marketing Spend',
+        editable: true, min: 0, aggregate: 'sum', role: 'cost',
+        help: 'All channels, all categories, for the month.' },
+
+      /* --- entered: customers won --- */
+      { key: 'b2c_customers', header: 'B2C Customers', type: 'number', sheetColumn: 'B2C Customers',
+        editable: true, min: 0, aggregate: 'sum', role: 'quantity',
+        help: 'Leads that became paying customers this month.' },
+      { key: 'b2b_customers', header: 'B2B Customers', type: 'number', sheetColumn: 'B2B Customers',
+        editable: true, min: 0, aggregate: 'sum', role: 'quantity' },
+      { key: 'pm_customers', header: 'P&M Customers', type: 'number', sheetColumn: 'P&M Customers',
+        editable: true, min: 0, aggregate: 'sum', role: 'quantity' },
+      { key: 'total_customers', header: 'Total Customers', type: 'number', sheetColumn: 'Total Customers',
+        derived: true, aggregate: 'sum' },
+
+      /* Per-category CPL, CPVL and CAC are deliberately absent. Each needs a
+       * per-category spend to divide, and spend is only known for the month as
+       * a whole. A column that could only ever hold an invented number is
+       * worse than no column: it renders, and nobody reading it knows.
+       *
+       * Lead-to-customer rate survives the change because it divides customers
+       * by leads and never touches spend. */
+
+      /* --- derived: lead to customer rate = customers / total leads --- */
+      { key: 'b2c_l2c', header: 'B2C Lead to Customer Rate', type: 'percent', sheetColumn: 'B2C Lead to Customer Rate', derived: true },
+      { key: 'b2b_l2c', header: 'B2B Lead to Customer Rate', type: 'percent', sheetColumn: 'B2B Lead to Customer Rate', derived: true },
+      { key: 'pm_l2c', header: 'P&M Lead to Customer Rate', type: 'percent', sheetColumn: 'P&M Lead to Customer Rate', derived: true },
+
+      /* --- derived: blended, across all three categories --- */
+      /* --- derived: the lead counts these figures were divided by ---
+       *
+       * Snapshot at write time, exactly as warehouse readings snapshot a
+       * warehouse's total space. Without it, correcting a lead count months
+       * later leaves every cost metric on this row quietly describing a
+       * denominator that no longer exists — the numbers still render, they
+       * are simply wrong, which is worse than "Data unavailable".
+       *
+       * With it, the row is always internally consistent: CPL, the spend and
+       * the lead count it was divided by all sit together and can be checked
+       * by eye. Re-saving the month through the entry form refreshes them. */
+      { key: 'leads_at_entry', header: 'Total Leads (at entry)', type: 'number',
+        sheetColumn: 'Total Leads (at entry)', derived: true, hiddenByDefault: true },
+      { key: 'valid_at_entry', header: 'Valid Leads (at entry)', type: 'number',
+        sheetColumn: 'Valid Leads (at entry)', derived: true, hiddenByDefault: true },
+
+      { key: 'cpl', header: 'Blended CPL', type: 'currency', sheetColumn: 'Blended CPL', derived: true },
+      { key: 'cpvl', header: 'Blended CPVL', type: 'currency', sheetColumn: 'Blended CPVL', derived: true },
+      { key: 'cac', header: 'Blended CAC', type: 'currency', sheetColumn: 'Blended CAC', derived: true },
+      { key: 'l2c_rate', header: 'Lead to Customer Rate', type: 'percent', sheetColumn: 'Lead to Customer Rate', derived: true },
+
+      { key: 'entered_by', header: 'Entered By', type: 'email', sheetColumn: 'Entered By',
+        derived: true, hiddenByDefault: true },
+    ],
+  },
+
   {
     id: 'access_control',
     label: 'Users & access',
@@ -350,6 +656,11 @@ export const DATASETS: DatasetDef[] = [
  * getDataset() deliberately stays SYNCHRONOUS. Every page, table, form and chart
  * already reads schema through it, so hydrating a module-level map means the
  * whole UI becomes configuration-driven without a single one of them changing.
+ *
+ * NOTE: hydrate REPLACES the seed rather than merging into it. An edit above
+ * therefore has no visible effect on any environment where the live registry
+ * loads — the same class of surprise as the department loader dropping
+ * code-only flags. Change the sheet, or make hydrate merge.
  * ------------------------------------------------------------------------- */
 
 let registry: DatasetDef[] = DATASETS;
@@ -366,7 +677,15 @@ export function hydrateDatasets(defs: DatasetDef[]): void {
 export const onRegistryChange = (fn: () => void) => { listeners.add(fn); return () => listeners.delete(fn); };
 
 export const allDatasets = (): DatasetDef[] => registry;
-export const getDataset = (id: string): DatasetDef | undefined => byId[id];
+/**
+ * Schema for a dataset id.
+ *
+ * Accepts a month-scoped id ("warehouse_readings::Readings SEP 2026") as well
+ * as a plain one. A month is a different set of ROWS, not a different schema,
+ * so both resolve to the same definition.
+ */
+export const getDataset = (id: string): DatasetDef | undefined =>
+  byId[id.includes('::') ? id.slice(0, id.indexOf('::')) : id];
 export const isMapped = (datasetId: string, columnKey: string) =>
   Boolean(byId[datasetId]?.columns.find(c => c.key === columnKey)?.sheetColumn);
 export const visibleColumns = (d: DatasetDef) => d.columns.filter(c => c.sheetColumn);

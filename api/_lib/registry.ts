@@ -141,22 +141,20 @@ export async function loadRegistry(force = false): Promise<DatasetDef[]> {
     .filter((d): d is DatasetDef => d !== null);
 
   /**
-   * Seed definitions are a MIGRATION fallback, not a permanent data source.
+   * Application-defined schema wins.
    *
-   * They carry no spreadsheet id, so they read the control workbook — which is
-   * how Finance and Sales ended up showing tabs nobody had connected. Once any
-   * source is configured, the seeds retire and a department shows data only if
-   * an admin connected its sheet.
+   * These definitions are the source of truth: they decide what the entry form
+   * shows, what the API accepts, what header row a new tab gets, and which
+   * sheet column each value lands in. A runtime row in data_sources cannot
+   * override one, because that row was produced by inspecting a spreadsheet and
+   * guessing at its columns — the approach this architecture replaced.
    *
-   * access_control is exempt: api/_lib/auth.ts resolves every principal through
-   * it, so it must exist before runtime configuration can be read at all.
+   * Runtime sources are still honoured for ids the code does not define, so a
+   * sheet an admin connected previously keeps working until it is either given
+   * a schema here or removed from the data_sources tab.
    */
-  const ALWAYS_KEEP = new Set(['access_control']);
-  const ids = new Set(runtime.map(d => d.id));
-  const usableSeed = runtime.length
-    ? SEED.filter(d => ALWAYS_KEEP.has(d.id))
-    : SEED;                                    // nothing configured yet
-  const defs = [...runtime, ...usableSeed.filter(d => !ids.has(d.id))];
+  const codeIds = new Set(SEED.map(d => d.id));
+  const defs = [...SEED, ...runtime.filter(d => !codeIds.has(d.id))];
 
   cache = { at: Date.now(), defs };
   return defs;

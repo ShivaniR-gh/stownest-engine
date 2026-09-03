@@ -57,6 +57,7 @@ async function call<T>(sid: string, path: string, init?: RequestInit): Promise<T
     if (res.status === 403) throw new HttpError(500, 'The service account cannot open this spreadsheet. Share the sheet with it as an Editor.');
     if (res.status === 404) throw new HttpError(500, `Spreadsheet ${sid.slice(0, 8)}… or the tab was not found. Check the id and tab names.`);
     if (res.status === 429) throw new HttpError(429, 'Google is rate-limiting requests to this spreadsheet.');
+    console.error("[sheets 502]", res.status, body.slice(0, 500));
     throw new HttpError(502, `Sheets API error ${res.status}: ${body.slice(0, 200)}`);
   }
   return res.json() as Promise<T>;
@@ -131,9 +132,9 @@ export interface SheetRead { rows: Row[]; unmappedSourceColumns: string[]; fetch
  * are reported back so a new column added by ops shows up in Settings rather
  * than disappearing.
  */
-export async function readDataset(ds: DatasetDef): Promise<SheetRead> {
+export async function readDataset(ds: DatasetDef, tabName?: string): Promise<SheetRead> {
   const sid = spreadsheetIdFor(ds);
-  const tab = await resolveTab(sid, ds.sheetName);
+  const tab = await resolveTab(sid, tabName ?? ds.sheetName);
   const res = await call<{ values?: string[][] }>(sid,
     `/values/${encodeURIComponent(quoteSheetNameForA1(tab))}?majorDimension=ROWS&valueRenderOption=UNFORMATTED_VALUE`);
 
@@ -161,10 +162,9 @@ export async function readDataset(ds: DatasetDef): Promise<SheetRead> {
     if (!raw || raw.every(v => v === '' || v === null || v === undefined)) continue;
     const row: Row = { __row: r + 1 };
     for (const [key, i] of columnIndex) row[key] = raw[i] ?? '';
-    const id = String(row[ds.idColumn] ?? '').trim();
     // A row with no identifier cannot be updated or deleted safely, so it is
     // keyed by its sheet position instead of being dropped.
-    row.__id = id || `row-${r + 1}`;
+    row.__id = recordId(ds, row, r + 1);
     rows.push(row);
   }
 
@@ -172,9 +172,9 @@ export async function readDataset(ds: DatasetDef): Promise<SheetRead> {
 }
 
 /* -------------------------------- writing --------------------------------- */
-async function headerRow(ds: DatasetDef): Promise<string[]> {
+async function headerRow(ds: DatasetDef, tabName?: string): Promise<string[]> {
   const sid = spreadsheetIdFor(ds);
-  const tab = await resolveTab(sid, ds.sheetName);
+  const tab = await resolveTab(sid, tabName ?? ds.sheetName);
   const res = await call<{ values?: string[][] }>(sid, `/values/${encodeURIComponent(rangeForSheet(tab, '1:1'))}`);
   return (res.values?.[0] ?? []).map(h => String(h ?? ''));
 }
@@ -193,23 +193,51 @@ function toSheetRow(ds: DatasetDef, headers: string[], values: Row, existing?: s
   return out;
 }
 
-export async function appendRow(ds: DatasetDef, values: Row): Promise<Row> {
+/**
+ * Stable record id for a row.
+ *
+ * A date-typed id column is the problem this solves: Sheets renders the same
+ * cell as "2026-07-01" or "01/07/2026" depending on locale and how it was
+ * written, so the raw string is not a stable key. Editing a record twice would
+ * fail the second time with "that record no longer exists" — the row is there,
+ * the id just changed shape. Normalising dates to ISO makes the id survive a
+ * round trip through the sheet.
+ */
+export function recordId(ds: DatasetDef, row: Row, rowNumber: number): string {
+  const raw = String(row[ds.idColumn] ?? '').trim();
+  if (!raw) return `row-${rowNumber}`;
+  const col = ds.columns.find(c => c.key === ds.idColumn);
+  if (col?.type !== 'date') return raw;
+
+  // Sheets returns an unformatted date cell as a serial: days since
+  // 1899-12-30. Date.parse reads "46174" as the year 46174, which is how a
+  // July 2026 row acquired the id "+046173-12" and stopped matching.
+  if (/^\d{1,6}(\.\d+)?$/.test(raw)) {
+    const ms = Math.round(Number(raw)) * 86400000 + Date.UTC(1899, 11, 30);
+    return new Date(ms).toISOString().slice(0, 10);
+  }
+
+  const t = Date.parse(raw);
+  return Number.isFinite(t) ? new Date(t).toISOString().slice(0, 10) : raw;
+}
+
+export async function appendRow(ds: DatasetDef, values: Row, tabName?: string): Promise<Row> {
   const sid = spreadsheetIdFor(ds);
-  const tab = await resolveTab(sid, ds.sheetName);
-  const headers = await headerRow(ds);
+  const tab = await resolveTab(sid, tabName ?? ds.sheetName);
+  const headers = await headerRow(ds, tab);
   const row = toSheetRow(ds, headers, values);
   const res = await call<{ updates: { updatedRange: string } }>(sid,
-    `/values/${encodeURIComponent(rangeForSheet(tab, 'A1:append'))}?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+    `/values/${encodeURIComponent(rangeForSheet(tab, 'A1')) + ':append'}?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
     { method: 'POST', body: JSON.stringify({ values: [row] }) });
 
   const rowNumber = Number(res.updates.updatedRange.match(/!\w+?(\d+)/)?.[1] ?? 0);
-  return { ...values, __row: rowNumber, __id: String(values[ds.idColumn] ?? `row-${rowNumber}`) };
+  return { ...values, __row: rowNumber, __id: recordId(ds, values, rowNumber) };
 }
 
-export async function updateRowByIndex(ds: DatasetDef, rowNumber: number, values: Row): Promise<Row> {
+export async function updateRowByIndex(ds: DatasetDef, rowNumber: number, values: Row, tabName?: string): Promise<Row> {
   const sid = spreadsheetIdFor(ds);
-  const tab = await resolveTab(sid, ds.sheetName);
-  const headers = await headerRow(ds);
+  const tab = await resolveTab(sid, tabName ?? ds.sheetName);
+  const headers = await headerRow(ds, tab);
   const current = await call<{ values?: string[][] }>(sid,
     `/values/${encodeURIComponent(rangeForSheet(tab, `${rowNumber}:${rowNumber}`))}`);
   const existing = current.values?.[0] ?? [];
@@ -225,11 +253,11 @@ export async function updateRowByIndex(ds: DatasetDef, rowNumber: number, values
     const i = headers.findIndex(h => norm(h) === norm(c.sheetColumn!));
     if (i >= 0) out[c.key] = row[i] ?? '';
   }
-  out.__id = String(out[ds.idColumn] ?? `row-${rowNumber}`);
+  out.__id = recordId(ds, out, rowNumber);
   return out;
 }
 
-export async function deleteRowByIndex(ds: DatasetDef, rowNumber: number): Promise<void> {
+export async function deleteRowByIndex(ds: DatasetDef, rowNumber: number, tabName?: string): Promise<void> {
   const sid = spreadsheetIdFor(ds);
   await call(sid, ':batchUpdate', {
     method: 'POST',
@@ -237,7 +265,7 @@ export async function deleteRowByIndex(ds: DatasetDef, rowNumber: number): Promi
       requests: [{
         deleteDimension: {
           range: {
-            sheetId: await tabId(sid, ds.sheetName),
+            sheetId: await tabId(sid, tabName ?? ds.sheetName),
             dimension: 'ROWS',
             startIndex: rowNumber - 1, // API is zero-based, sheet rows are one-based
             endIndex: rowNumber,
@@ -255,7 +283,7 @@ export async function audit(entry: {
 }): Promise<void> {
   try {
     await call(required('SHEETS_SPREADSHEET_ID'),
-      `/values/${encodeURIComponent(rangeForSheet('audit_log', 'A1:append'))}?valueInputOption=RAW&insertDataOption=INSERT_ROWS`, {
+      `/values/${encodeURIComponent(rangeForSheet('audit_log', 'A1')) + ':append'}?valueInputOption=RAW&insertDataOption=INSERT_ROWS`, {
       method: 'POST',
       body: JSON.stringify({
         values: [[new Date().toISOString(), entry.actor, entry.action, entry.dataset, entry.recordId, entry.detail ?? '']],
@@ -292,6 +320,7 @@ export async function readRange(spreadsheetId: string, range: string): Promise<s
  *  admin connect a source without hand-building the config tabs first. */
 export async function ensureTab(spreadsheetId: string, title: string, headers: readonly string[]): Promise<void> {
   const tabs = await listTabs(spreadsheetId);
+  console.log("[ensureTab]", spreadsheetId.slice(0,12), "wants:", title, "found:", JSON.stringify(tabs));
   if (!tabs.includes(title)) {
     await call(spreadsheetId, ':batchUpdate', {
       method: 'POST',
@@ -355,7 +384,7 @@ export async function appendRows(spreadsheetId: string, tab: string, rows: (stri
   if (!rows.length) return;
   const resolvedTab = await resolveTab(spreadsheetId, tab);
   await call(spreadsheetId,
-    `/values/${encodeURIComponent(rangeForSheet(resolvedTab, 'A1:append'))}?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
+    `/values/${encodeURIComponent(rangeForSheet(resolvedTab, 'A1')) + ':append'}?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
     { method: 'POST', body: JSON.stringify({ values: rows }) });
 }
 

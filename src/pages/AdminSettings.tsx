@@ -7,7 +7,7 @@ import { allDatasets } from '@/config/datasets';
 import { METRICS } from '@/config/metrics';
 import { DEPT_BY_ID } from '@/config/departments';
 import { usePermission } from '@/lib/permissions/usePermission';
-import { dataSourceKind, getEntry, refreshAll, STALE_MS } from '@/lib/data/store';
+import { getEntry, refreshAll, STALE_MS } from '@/lib/data/store';
 import { formatInt, relativeTime } from '@/lib/format';
 
 /**
@@ -61,9 +61,7 @@ export default function AdminSettings() {
             <div className="card__bd" style={{ display: 'flex', gap: 'var(--s7)', flexWrap: 'wrap', fontSize: 'var(--fs-sm)' }}>
               <span>
                 <div className="eyebrow">Data source</div>
-                {dataSourceKind === 'demo'
-                  ? <Badge tone="signal">Demo data</Badge>
-                  : <Badge tone="pos">Google Sheets</Badge>}
+                <Badge tone="pos">Google Sheets</Badge>
               </span>
               <span>
                 <div className="eyebrow">Datasets configured</div>

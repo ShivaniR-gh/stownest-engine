@@ -1,10 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { DatasetDef, Row } from '@/config/types';
 import { Button, ConfirmDialog, Icon, Popover } from '@/components/primitives';
 import { DataTable } from './DataTable';
 import { RecordForm } from './RecordForm';
-import { createRow, deleteRow, updateRow } from '@/lib/data/store';
+import { ReadingForm } from './ReadingForm';
+import { adapter, createRow, deleteRow, scopedId, updateRow } from '@/lib/data/store';
 import { useScopedRows } from '@/lib/analytics/useMetrics';
 import { applySearch, describePeriod } from '@/lib/analytics/filters';
 import { useAnalytics } from '@/lib/analytics/AnalyticsContext';
@@ -19,10 +20,52 @@ import { Gate } from '@/lib/permissions/Gate';
  * Rows arrive already scoped to the global period and filters, so the table a
  * user exports is exactly the table they were looking at.
  */
-export function DatasetPanel({ dataset, prefilter }: { dataset: DatasetDef; prefilter?: (r: Row) => boolean }) {
+export function DatasetPanel({ dataset, prefilter, month: monthProp, allowCreate = true }: {
+  dataset: DatasetDef;
+  prefilter?: (r: Row) => boolean;
+  /** False when the page provides its own combined entry form — two New
+   *  buttons writing the same tab in different shapes is a trap. */
+  allowCreate?: boolean;
+  /** Supplied when the page has its own month control; omit for a standalone
+   *  panel. Explicitly allows undefined because the project runs with
+   *  exactOptionalPropertyTypes. */
+  month?: string | undefined;
+}) {
   const nav = useNavigate();
   const { can } = usePermission();
-  const { rows, all, status, error } = useScopedRows(dataset.id);
+
+  /**
+   * Monthly datasets keep one tab per month, so the table has to be told WHICH
+   * month to read. Without this the panel read whichever month the server
+   * defaulted to while the form wrote to the month the user picked — the rows
+   * went in correctly and the table looked empty.
+   */
+  const monthly = dataset.tabStrategy === 'monthly';
+  const [ownMonth, setOwnMonth] = useState('');
+  const [months, setMonths] = useState<string[]>([]);
+
+  // A page-level filter bar wins; the built-in picker is the fallback so the
+  // panel still works on its own.
+  const month = monthProp ?? ownMonth;
+  const setMonth = monthProp === undefined ? setOwnMonth : () => {};
+
+  useEffect(() => {
+    if (!monthly || monthProp !== undefined) { setMonths([]); return; }
+    let cancelled = false;
+    adapter.list(dataset.id)
+      .then(r => {
+        if (cancelled) return;
+        setMonths(r.tabs ?? []);
+        setOwnMonth(m => m || r.tab || r.tabs?.[0] || '');
+      })
+      .catch(() => { /* the table's own error state covers this */ });
+    return () => { cancelled = true; };
+  }, [dataset.id, monthly, monthProp]);
+
+  // One cache entry per month, so switching months does not discard the other.
+  const readId = monthly && month ? scopedId(dataset.id, month) : dataset.id;
+
+  const { rows, all, status, error } = useScopedRows(readId);
   const { period } = useAnalytics();
 
   // Explains an empty table rather than blaming the date range: a mis-mapped
@@ -49,7 +92,7 @@ export function DatasetPanel({ dataset, prefilter }: { dataset: DatasetDef; pref
     const list = Array.isArray(deleting) ? deleting : [deleting];
     setBusy(true); setFailure(null);
     try {
-      for (const r of list) await deleteRow(dataset.id, String(r.__id));
+      for (const r of list) await deleteRow(readId, String(r.__id));
       setDeleting(null); setSelection([]);
     } catch (e) {
       setFailure(e instanceof Error ? e.message : 'Delete failed. Nothing was changed.');
@@ -74,11 +117,28 @@ export function DatasetPanel({ dataset, prefilter }: { dataset: DatasetDef; pref
         onSelectionChange={setSelection}
         onRowClick={r => nav(`/d/${dept}/${dataset.id}/${encodeURIComponent(String(r.__id))}`)}
         toolbarLeft={
-          <span className="search" style={{ width: 260 }}>
-            <Icon name="search" size={14} />
-            <input className="field" placeholder={`Search ${dataset.label.toLowerCase()}…`}
-              value={q} onChange={e => setQ(e.target.value)} aria-label="Search records" />
-          </span>
+          <>
+            {/* Which month's tab the table below is showing. */}
+            {monthly && monthProp === undefined && (
+              <select
+                className="field"
+                style={{ width: 150 }}
+                value={month}
+                onChange={e => setMonth(e.target.value)}
+                aria-label="Month"
+              >
+                {!months.length && <option value="">Loading…</option>}
+                {months.map(m => (
+                  <option key={m} value={m}>{m.replace(/^\S+\s/, '')}</option>
+                ))}
+              </select>
+            )}
+            <span className="search" style={{ width: 260 }}>
+              <Icon name="search" size={14} />
+              <input className="field" placeholder={`Search ${dataset.label.toLowerCase()}…`}
+                value={q} onChange={e => setQ(e.target.value)} aria-label="Search records" />
+            </span>
+          </>
         }
         toolbarRight={
           <>
@@ -92,11 +152,13 @@ export function DatasetPanel({ dataset, prefilter }: { dataset: DatasetDef; pref
                 Export
               </Button>
             </Gate>
-            <Gate action="CREATE" department={dept}>
-              <Button size="sm" variant="primary" icon="plus" onClick={() => setEditing(null)}>
-                New {dataset.noun}
-              </Button>
-            </Gate>
+            {allowCreate && (
+              <Gate action="CREATE" department={dept}>
+                <Button size="sm" variant="primary" icon="plus" onClick={() => setEditing(null)}>
+                  New {dataset.noun}
+                </Button>
+              </Gate>
+            )}
           </>
         }
         rowActions={r => (
@@ -130,14 +192,25 @@ export function DatasetPanel({ dataset, prefilter }: { dataset: DatasetDef; pref
         )}
       />
 
-      {editing !== undefined && (
+      {/* Monthly datasets get a purpose-built form: the warehouse comes from a
+          dropdown and the space figures are computed as you type. Everything
+          else uses the generic schema-driven form. */}
+      {editing !== undefined && dataset.tabStrategy === 'monthly' && !editing && (
+        <ReadingForm
+          dataset={dataset}
+          onClose={() => setEditing(undefined)}
+          onSubmit={async (values, tab) => { await createRow(scopedId(dataset.id, tab), values); setMonth(tab); }}
+        />
+      )}
+
+      {editing !== undefined && (dataset.tabStrategy !== 'monthly' || editing) && (
         <RecordForm
           dataset={dataset}
           record={editing}
           onClose={() => setEditing(undefined)}
           onSubmit={async values => {
-            if (editing) await updateRow(dataset.id, String(editing.__id), values);
-            else await createRow(dataset.id, values);
+            if (editing) await updateRow(readId, String(editing.__id), values);
+            else await createRow(readId, values);
           }}
         />
       )}

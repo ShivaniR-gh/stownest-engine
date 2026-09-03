@@ -1,0 +1,170 @@
+/* ==========================================================================
+   Marketing dashboard.
+
+   Follows the collections treatment: gradient KPI cards with hues fixed per
+   position rather than rotating, so a card added later cannot make Total
+   Leads change colour. The acquisition view needs five, so a fifth hue is
+   defined here rather than in metrics.css — nothing else uses it.
+   ========================================================================== */
+
+:root {
+  --kpi-5a: #0d9488;  --kpi-5b: #0f766e;   /* teal */
+}
+[data-theme='dark'] {
+  --kpi-5a: #0b7268;  --kpi-5b: #0a5f57;
+}
+
+.mk__kpi[data-kpi='1'] { background: linear-gradient(140deg, var(--kpi-1a), var(--kpi-1b)); }
+.mk__kpi[data-kpi='2'] { background: linear-gradient(140deg, var(--kpi-3a), var(--kpi-3b)); }
+.mk__kpi[data-kpi='3'] { background: linear-gradient(140deg, var(--kpi-1a), var(--kpi-1b)); }
+.mk__kpi[data-kpi='4'] { background: linear-gradient(140deg, var(--kpi-4a), var(--kpi-4b)); }
+.mk__kpi[data-kpi='5'] { background: linear-gradient(140deg, var(--kpi-5a), var(--kpi-5b)); }
+.mk__kpi { border-color: transparent; }
+.mk__kpi .metric__value { font-size: var(--fs-2xl); letter-spacing: -.025em; }
+.mk__kpi .metric__cmp { display: flex; align-items: center; gap: var(--s2); flex-wrap: wrap; }
+
+/* Five cards do not divide evenly into the four-column KPI grid, so the
+   acquisition row gets its own track count. Below 1200px it falls back to
+   the shared auto-fit behaviour. */
+@media (min-width: 1200px) {
+  .grid--kpi.mk__kpi5 { grid-template-columns: repeat(5, 1fr); }
+}
+
+/* ---------- Delta chip ---------- */
+.mk__delta {
+  display: inline-flex; align-items: center; gap: 3px;
+  padding: 1px 6px; border-radius: var(--r-sm);
+  font-size: var(--fs-xs); font-variant-numeric: tabular-nums;
+  background: rgba(255, 255, 255, .18); color: #fff;
+}
+.mk__delta--pos  { background: rgba(255, 255, 255, .26); }
+.mk__delta--neg  { background: rgba(0, 0, 0, .22); }
+.mk__delta--idle { background: rgba(255, 255, 255, .12); }
+.mk__note { opacity: .78; }
+
+/* ---------- Month picker ---------- */
+.mk__month select {
+  height: 30px; padding: 0 26px 0 10px;
+  border: 1px solid var(--line-strong); border-radius: var(--r-md);
+  background-color: var(--surface); color: var(--ink-700);
+  font: inherit; font-size: var(--fs-sm); cursor: pointer;
+  appearance: none;
+  background-image: var(--fl-chevron);
+  background-repeat: no-repeat; background-position: right 9px center; background-size: 12px;
+}
+.mk__month select:hover { border-color: var(--ink-300); }
+.mk__month select:focus-visible {
+  outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+/* ---------- Category cards ---------- */
+.mk__cats {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--s4);
+}
+.mk__cat {
+  padding: var(--s4); border: 1px solid var(--line);
+  border-radius: var(--r-lg); background: var(--surface);
+  cursor: pointer; transition: box-shadow .15s, transform .15s, border-color .15s;
+}
+.mk__cat:hover { box-shadow: var(--sh-md); transform: translateY(-1px); border-color: var(--line-strong); }
+.mk__cat:focus-visible { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+
+.mk__cat-hd { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s2); }
+.mk__cat-nm { font-weight: 600; color: var(--ink-800); }
+.mk__cat-rate { font-size: var(--fs-lg); font-weight: 650; color: var(--ink-900); }
+
+.mk__cat-bar {
+  height: 6px; margin: var(--s3) 0; border-radius: 3px;
+  background: var(--surface-sunk); overflow: hidden;
+}
+.mk__cat-bar > span {
+  display: block; height: 100%; border-radius: 3px;
+  background: linear-gradient(90deg, var(--kpi-1a), var(--kpi-2a));
+}
+
+.mk__cat-rows { display: grid; gap: 5px; margin: 0; }
+.mk__cat-rows > div { display: flex; justify-content: space-between; gap: var(--s3); }
+.mk__cat-rows dt { color: var(--ink-500); font-size: var(--fs-sm); }
+.mk__cat-rows dd { margin: 0; color: var(--ink-800); font-size: var(--fs-sm); font-weight: 550; }
+
+/* ==========================================================================
+   Entry form.
+   ========================================================================== */
+
+.mk__block { margin-bottom: var(--s5); }
+.mk__block--total {
+  padding: var(--s4); border-radius: var(--r-md);
+  background: var(--surface-sunk); border: 1px solid var(--line-faint);
+}
+
+.mk__sec {
+  margin: 0 0 var(--s3); font-size: var(--fs-sm); font-weight: 650;
+  text-transform: uppercase; letter-spacing: .06em; color: var(--ink-500);
+}
+
+.mk__grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--s4);
+}
+
+.mk__money { position: relative; display: block; }
+.mk__cur {
+  position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
+  color: var(--ink-400); font-size: var(--fs-sm); pointer-events: none;
+}
+.mk__money .field { padding-left: 24px; }
+
+/* Computed preview under each category. Visually quieter than the inputs
+   above it — these are consequences of what was typed, not more fields. */
+.mk__calc {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: var(--s3); margin: var(--s3) 0 0;
+  padding: var(--s3); border-radius: var(--r-md);
+  background: var(--surface-sunk); border: 1px solid var(--line-faint);
+}
+.mk__calc > div { display: flex; flex-direction: column; gap: 2px; }
+.mk__calc dt { font-size: var(--fs-xs); color: var(--ink-500); }
+.mk__calc dd { margin: 0; font-size: var(--fs-sm); font-weight: 600; color: var(--ink-800); }
+
+.mk__note {
+  margin: var(--s3) 0 0; font-size: var(--fs-sm); color: var(--ink-500);
+}
+
+.mk__err {
+  margin-bottom: var(--s4); padding: var(--s3) var(--s4);
+  border-radius: var(--r-md);
+  background: var(--neg-soft); color: var(--neg);
+  border: 1px solid var(--neg);
+  font-size: var(--fs-sm);
+}
+/* A partial save is not a failure — leads are on the sheet. Amber rather
+   than red, so the two outcomes are not read as the same thing. */
+.mk__err--partial {
+  background: var(--signal-soft); color: var(--signal); border-color: var(--signal);
+}
+
+.mk__warn {
+  margin: var(--s4) 0 0; padding: var(--s3) var(--s4) var(--s3) var(--s6);
+  border-radius: var(--r-md);
+  background: var(--signal-soft); color: var(--signal);
+  font-size: var(--fs-sm);
+}
+.mk__warn li + li { margin-top: 4px; }
+
+/* Blended-metric disclosure. Stated once under the KPI strip rather than
+   repeated on every card — a reader seeing a single CPL should know it covers
+   all three categories, but not be nagged about it five times. */
+.mk__disclosure {
+  margin: var(--s4) 0 0; padding: var(--s3) var(--s4);
+  border-radius: var(--r-md);
+  background: var(--surface-sunk); border: 1px solid var(--line-faint);
+  color: var(--ink-500); font-size: var(--fs-sm); line-height: 1.5;
+}
+
+/* Month and spend, above the categories. Bordered rather than filled so it
+   reads as the header of the form, not as another category block. */
+.mk__block--head {
+  padding: var(--s4); border-radius: var(--r-md);
+  border: 1px solid var(--line); background: var(--surface);
+}

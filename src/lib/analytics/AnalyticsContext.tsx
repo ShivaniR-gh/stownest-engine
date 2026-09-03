@@ -19,13 +19,24 @@ interface AnalyticsState {
 }
 
 const Ctx = createContext<AnalyticsState | null>(null);
-const KEY = 'sn.analytics.v1';
+
+/** Bumped from v1 when the period picker was removed. Browsers still holding
+ *  a v1 entry have `presetId: 'last30'` saved, which would filter every screen
+ *  to a window the UI no longer offers any way to widen. A new key retires
+ *  that state for everyone without asking anyone to clear site data. */
+const KEY = 'sn.analytics.v2';
 
 /** Global analytics state. Persisted so a reload keeps the analyst where they
  *  were — an ops lead filtered to Bengaluru + Delayed does not want that reset
  *  because they refreshed. */
 export function AnalyticsProvider({ children }: { children: ReactNode }) {
-  const [presetId, setPresetId] = useState<PresetId>('last30');
+  /**
+   * All-time, and effectively fixed: with no period picker in the UI, nothing
+   * calls setPreset. A narrower default would silently hide rows — collections
+   * runs Feb–Jul 2026, so 'last30' returns an empty table on a September
+   * morning and reads as a data outage rather than a filter.
+   */
+  const [presetId, setPresetId] = useState<PresetId>('all');
   const [custom, setCustomState] = useState({ from: '', to: '' });
   const [filters, setFilters] = useState<FilterMap>({});
   const [compare, setCompare] = useState(true);
@@ -34,7 +45,8 @@ export function AnalyticsProvider({ children }: { children: ReactNode }) {
     try {
       const s = JSON.parse(localStorage.getItem(KEY) ?? 'null');
       if (!s) return;
-      if (s.presetId) setPresetId(s.presetId);
+      // presetId is deliberately NOT restored. It is not user-settable any
+      // more, so a saved value can only ever be a stale one.
       if (s.custom) setCustomState(s.custom);
       if (s.filters) setFilters(s.filters);
       if (typeof s.compare === 'boolean') setCompare(s.compare);
@@ -42,8 +54,8 @@ export function AnalyticsProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    localStorage.setItem(KEY, JSON.stringify({ presetId, custom, filters, compare }));
-  }, [presetId, custom, filters, compare]);
+    localStorage.setItem(KEY, JSON.stringify({ custom, filters, compare }));
+  }, [custom, filters, compare]);
 
   const period = useMemo(() => resolvePeriod(presetId, custom), [presetId, custom]);
   const prevPeriod = useMemo(() => previousPeriod(period), [period]);

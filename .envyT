@@ -1,0 +1,16 @@
+# ---- Client (safe to expose; Vite inlines VITE_* into the bundle) ----
+VITE_GOOGLE_CLIENT_ID=1079778863951-0750pgr9scqqs66d5bi0skenk246ecoo.apps.googleusercontent.com
+# demo | sheets  — "demo" runs on bundled sample rows and shows a persistent banner
+VITE_DATA_SOURCE=sheets
+
+# ---- Server only (Vercel env vars; NEVER prefix these with VITE_) ----
+GOOGLE_CLIENT_ID=1079778863951-0750pgr9scqqs66d5bi0skenk246ecoo.apps.googleusercontent.com
+SHEETS_SPREADSHEET_ID=1WohUt75L5NrsLTshdTetn9o-tlK1zvaiDVhbct_QbtM
+# Comma-separated bootstrap super admins. Everyone else is resolved from the access_control tab.
+SUPER_ADMIN_EMAILS=shivani.r@stownest.com
+# Restrict sign-in to your Workspace domain
+ALLOWED_HOSTED_DOMAIN=stownest.com
+GOOGLE_SA_EMAIL=sn-sheets@core-arena-505209-b8.iam.gserviceaccount.com
+GOOGLE_SA_PRIVATE_KEY="-----BEGIN PRIVATE 
+KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQD0JUh+J8GB3fJ2\nm/DYQXKdPa79zzUStmu5URR2bmhyVQxm6CAkYdBoXEhbUAuvkaYpPKhJu4yzGgHh\njVwrXC+UU89e4czXML0jzaUC69gPKfug2ROUXM66VViIPXk9Y33ajqeWE68rpAbQ\n0DGpLIWLsRIleuewizPqC4HlZQhSiWSYsFD08cyA/eR3I4hMYWZBDiA0+ZqdJlvw\n7E/Yh+NYPJYC8jicgwVn4fGouJMFM3QBUwn5weWAOzvtguJx6tB0XJdeRiDN5jRN\n8DC9ECfwl1YkksQSePe8jGVkEk0rg1vVtz5gqX9k5Rq8DCADDk1hjUiLQYmr+oUp\ngw5I8CVdAgMBAAECggEAXnX4ZNsj6wfBEnQGTN2Rp1Xg2VGs0qci6cn9lU7leWr/\nh+dC3GC9/krKMg433z+GnwjZgeGfMAKdfLOxWBNsU0LUBn1twEqau3oK4KT4bPGM\n6nBiu3HnCEASJ3BFcuOGI6QzIgVOrp9hhbQvqqlPqDsj7r1tXCiXtvOp1+PtwuSl\nNfP/4uawo9j0JklmxX8Ul1qwhPxutd1OzCynncu6e8Hensl0ojDjn1iFpBafn//g\n61krlarfQt1UXdtM0OFJNC53ojBrou5XYn5+2ieI0j2o+K6hGaomWvnM9W1JSH4P\na6Z2o6L9aoXOpVkUhMaasTj2vprM75WY/f080PKcnwKBgQD/yG3W46mPLUgDzmhK\ndrtbEOCCmbEeQj3RyjXKvhU4r2eygRyWfO+/KP8yzDKdAkrldtNsVA1+IlWXwqpz\nN2/ZHoO4E/GhlRs0US7hCOI5vYYFRw7QMOESrgYTQ8aYGusSer0ESVxhJ11BeDCF\ng89cL03Z6RlePet8BrhpfJ38qwKBgQD0WlNo1Fyp1W2pI3vFsqhCRyDw/Og+TUnj\nlQCjEumtAxOSNlxhehstz5XrgUSEL/4BsvewRq5pmcVH+od6TALVJ9KaveTL1kqQ\nriTCQHrki35xFVSQaDisgKdYeB5ecrrYnGLA1OX5/teXKi+3AnuhNlR+KRHYz2oX\nTLz+8ZdWFwKBgQDllTlB0Ea5RKOHBxWFAN1Z9+QMVXcs+bgTPbTarZLOtmIVTt4i\nFTH8Gwg0yCQF2bDwFZ/fc/JIbPj2prvnfrLd5w3Dg+M2bWdlphi11At6WCqbQhSB\nud3Lrne1gvgWPtMQWyqdVlucuIBz6zViIdVVoP/3v8oNVPaw9DdCN6B20QKBgCnb\nFxKL3duRnZktZNQ2iC/iMzhUegvB/XgoW9WTNcfXEREokqZ33hP4zPtsRypFdkMg\nPuFJGjMojeyIc5B1WL7edWrgQELSUC98RPupQ+PGKUCBoNyjnaGe4At9d+ZBzNOx\n5hCV51btWkygg0/b8wVoYwzBSDdVQB0BnhYlmAC9AoGAFGFGXShPEcclGtzfQJuU\n1Od60XoGtYxnoIAhiHI0XDnOx8/WPlrewxCyGuXXKx44OasNF42Gl0lAxC4np8jv\n7BiGZJch5QG9v8LLYaOQSWjL9x1suc3DTl06HTVFP4a5rhxj9CvDP/Jw6LRuXQlZ\nc+H97MthSYHjDLpHASsSzHI=\n-----END PRIVATE KEY-----\n"
+SHEETS_ID_FACILITY=1-tK4-6xV5kMO9kYZ6gvl-Gh4z38Nk54YaYA8DGYc5zk

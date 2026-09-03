@@ -48,6 +48,25 @@ const MONTHS: Record<string, number> = {
 };
 
 /**
+ * Google Sheets serial date: days since 1899-12-30.
+ *
+ * Bounds are roughly 1954 to 2119 — wide enough for any operational date and
+ * narrow enough that a plain quantity in a date-typed cell is not silently
+ * reinterpreted as a date.
+ *
+ * `api/_lib/sheets.ts` → recordId() does the same conversion for the server's
+ * record ids. The two must stay identical: a value that converts one way here
+ * and another way there produces an id that cannot be matched on write.
+ */
+const SERIAL_MIN = 20000;
+const SERIAL_MAX = 80000;
+
+function fromSerial(n: number): Date | null {
+  if (!(n > SERIAL_MIN && n < SERIAL_MAX)) return null;
+  return new Date(Math.round((n - 25569) * 86400000));
+}
+
+/**
  * Month-granularity values, which operational sheets use constantly:
  *   Jan 2026 · January 2026 · 2026-01 · 01/2026 · Jan-26
  * Resolves to the first of that month so period filtering works normally.
@@ -85,13 +104,18 @@ function parseMonth(s: string): Date | null {
 
 export function parseDate(v: unknown): Date | null {
   if (v instanceof Date) return Number.isNaN(v.getTime()) ? null : v;
-  if (typeof v === 'number') {
-    // Google Sheets serial date (days since 1899-12-30)
-    if (v > 20000 && v < 80000) return new Date(Math.round((v - 25569) * 86400000));
-    return null;
-  }
+  if (typeof v === 'number') return fromSerial(v);
   if (typeof v !== 'string' || !v.trim()) return null;
+
   const s = v.trim();
+
+  /* A serial that has been through JSON, a form field or String() arrives here
+     as text. Without this branch it reaches Date.parse below, which reads
+     "46174" as the year 46174 — the bug that gave a July 2026 row the record
+     id "+046173-12" and made every edit fail to match. Checked before the
+     dd/mm/yyyy branch, which a bare number cannot satisfy anyway. */
+  if (/^\d+(\.\d+)?$/.test(s)) return fromSerial(Number(s));
+
   // dd/mm/yyyy and dd-mm-yyyy — the Indian sheet default. Checked before Date.parse,
   // which would read 03/04/2025 as March 4th.
   const m = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})/);

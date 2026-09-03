@@ -1,0 +1,207 @@
+/* ==========================================================================
+   Filter bar + view toggle
+
+   The rail sits quieter than the cards it filters — recessed surface,
+   hairline border, muted ink. Blue is spent only on "this control is
+   narrowing the data", so one glance at the row says what is filtered.
+   ========================================================================== */
+
+:root {
+  /* Only value that cannot be a token: the chevron colour is baked into a
+     data URI. Keep in step with --ink-400. */
+  --fl-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none' stroke='%2394a3b8' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 4.75 6 7.75 9 4.75'/%3E%3C/svg%3E");
+}
+[data-theme='dark'] {
+  --fl-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none' stroke='%237c8aa3' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 4.75 6 7.75 9 4.75'/%3E%3C/svg%3E");
+}
+
+/* ---------- The row ---------- */
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s2);
+  margin-bottom: var(--s5);
+}
+
+/* ---------- One control ---------- */
+/* The label carries the box; the select inside is bare. That way the month
+   control's icon sits inside the same frame as its text. */
+.filter-bar__field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 10px;
+  min-width: 0;
+  flex: 0 1 auto;
+  background-color: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  color: var(--ink-700);
+  font-size: var(--fs-sm);
+  cursor: pointer;
+  transition: background-color var(--t-fast), border-color var(--t-fast),
+              color var(--t-fast);
+}
+.filter-bar__field:hover {
+  background-color: var(--surface-sunk);
+  border-color: var(--ink-300);
+  color: var(--ink-900);
+}
+.filter-bar__field:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.filter-bar__field svg { color: var(--ink-400); flex-shrink: 0; }
+
+.filter-bar__field select {
+  appearance: none;
+  border: 0;
+  background-color: transparent;
+  background-image: var(--fl-chevron);
+  background-repeat: no-repeat;
+  background-position: right center;
+  background-size: 12px 12px;
+  padding: 0 18px 0 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  width: 100%;
+  min-width: 0;
+  text-overflow: ellipsis;
+  outline: none;
+}
+/* Native dropdown list — without this the options render on white in dark mode. */
+.filter-bar__field select option {
+  background-color: var(--surface-raised);
+  color: var(--ink-900);
+}
+
+.filter-bar__field--month { flex: 0 0 auto; }
+.filter-bar__field--wide { flex: 0 1 260px; }
+
+/* A dropdown with nothing to offer reads as disabled rather than empty. */
+.filter-bar__field:has(select:disabled) {
+  opacity: .5;
+  cursor: not-allowed;
+  background-color: var(--surface-sunk);
+}
+.filter-bar__field:has(select:disabled):hover { border-color: var(--line-strong); }
+
+/* ---------- Applied ---------- */
+/* Set by DatasetFilters when the control is off its "All …" default.
+   The only blue in the row. */
+.filter-bar__field.is-on {
+  background-color: var(--accent-soft);
+  border-color: var(--accent-line);
+  color: var(--accent);
+  font-weight: 550;
+}
+.filter-bar__field.is-on:hover {
+  border-color: var(--accent);
+  background-color: var(--accent-soft);
+  color: var(--accent);
+}
+.filter-bar__field.is-on svg { color: var(--accent); }
+
+/* ---------- View toggle (Dashboard / Records) ---------- */
+/* Column, not row: the dataset switcher picks WHAT you are looking at, the
+   toggle picks HOW. Side by side they read as one flat set of five buttons. */
+.view-head {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--s2);
+  margin-bottom: var(--s5);
+}
+/* Indents the toggle under the dataset it belongs to. */
+.view-head > .view-toggle { margin-left: var(--s3); }
+.view-toggle {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  background-color: var(--surface-sunk);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+}
+.view-toggle__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background-color: transparent;
+  color: var(--ink-600);
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-weight: 550;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color var(--t-fast), color var(--t-fast);
+}
+.view-toggle__btn:hover { color: var(--ink-900); }
+.view-toggle__btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+/* Explicit colours — inheriting a light --surface here is what turned the
+   active pill into a white block in dark mode. */
+.view-toggle__btn.is-active {
+  background-color: var(--surface-raised);
+  color: var(--ink-900);
+  box-shadow: var(--sh-sm);
+}
+[data-theme='dark'] .view-toggle__btn.is-active {
+  background-color: var(--accent-soft);
+  color: var(--accent-hover);
+}
+
+/* ---------- Responsive ---------- */
+@media (max-width: 720px) {
+  .filter-bar { gap: var(--s1); }
+  .filter-bar__field { flex: 1 1 calc(50% - var(--s1)); }
+  .filter-bar__field--wide { flex: 1 1 100%; }
+  .view-head { flex-wrap: wrap; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .filter-bar__field,
+  .view-toggle__btn { transition: none; }
+}
+
+/* ---------- Records sub-tabs ---------- */
+/* A second, quieter level under the view toggle: pills on a plain row rather
+   than in a track, so the hierarchy reads dataset → view → segment without
+   three identical-looking controls stacked up. */
+.subtabs {
+  display: flex; flex-wrap: wrap; gap: var(--s1);
+  margin-bottom: var(--s3);
+}
+.subtabs__btn {
+  height: 30px; padding: 0 14px;
+  border: 1px solid var(--line); border-radius: 999px;
+  background-color: var(--surface);
+  color: var(--ink-600);
+  font: inherit; font-size: var(--fs-sm); font-weight: 550;
+  cursor: pointer; white-space: nowrap;
+  transition: background-color var(--t-fast), border-color var(--t-fast), color var(--t-fast);
+}
+.subtabs__btn:hover { border-color: var(--ink-300); color: var(--ink-900); }
+.subtabs__btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.subtabs__btn.is-active {
+  background-color: var(--accent-soft);
+  border-color: var(--accent-line);
+  color: var(--accent);
+}
+@media (prefers-reduced-motion: reduce) { .subtabs__btn { transition: none; } }
+
+/* The toggle and the page's primary action share one line; the entry button
+   sits right so it reads as an action on the view, not another tab. */
+.view-head__row { display: flex; align-items: center; flex-wrap: wrap; gap: var(--s3); width: 100%; }
+.view-head__row > .btn:last-child { margin-left: auto; }

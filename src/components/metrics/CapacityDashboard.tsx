@@ -35,7 +35,20 @@ export function CapacityDashboard({ ds, rows, schema }: {
   const [drill, setDrill] = useState<{ title: string; rows: Row[] } | null>(null);
   const { roles, hasUtilisation, primaryDimension } = schema;
 
-  const nameDim: ColumnDef | undefined = roles.name ?? primaryDimension ?? undefined;
+  /**
+   * Which column names the thing being measured.
+   *
+   * `roles.name` is the admin's explicit answer and always wins. When it is
+   * unset, fall back to the dataset's own titleColumn / idColumn before the
+   * inferred primary dimension — every DatasetDef already declares those, so
+   * this needs no schema edit and stays free of column names. Without the
+   * fallback the inferred dimension wins, which is how this panel ended up
+   * grouping by location rather than by the row's own name.
+   */
+  const mappedCol = (key?: string): ColumnDef | undefined =>
+    key ? ds.columns.find(c => c.key === key && c.sheetColumn) : undefined;
+  const nameDim: ColumnDef | undefined =
+    roles.name ?? mappedCol(ds.titleColumn) ?? mappedCol(ds.idColumn) ?? primaryDimension ?? undefined;
   const locDim: ColumnDef | undefined = roles.location;
   const dateCol: ColumnDef | undefined = roles.date ?? schema.dateColumn ?? undefined;
   const unit = roles.capacity?.header.match(/\(([^)]+)\)/)?.[1] ?? '';
@@ -149,26 +162,13 @@ export function CapacityDashboard({ ds, rows, schema }: {
           {nameDim && byName.length > 0 ? (
             <ChartFrame title={`Utilisation by ${nameDim.header}`} department={ds.department} height={300}
               question={`Which ${nameDim.header.toLowerCase()} values are closest to full?`}>
-              {() => (
-                <div className="util__rows" style={{ maxHeight: 300, overflowY: 'auto' }}>
-                  {byName.slice(0, 14).map(u => (
-                    <div key={u.key} className="util__row" onClick={() => open(u)} role="button" tabIndex={0}>
-                      <span style={{ minWidth: 0 }}>
-                        <div className="util__nm" title={u.key}>{u.key}</div>
-                        <div className="util__sub">{formatInt(u.available)} {unit} free</div>
-                      </span>
-                      <span className="util__bar">
-                        <span className="util__track" data-band={u.band}>
-                          <span style={{ width: `${Math.min(100, u.pct)}%` }} />
-                        </span>
-                        <span className="util__pct">{formatPct(u.pct, 1)}</span>
-                      </span>
-                      <span style={{ textAlign: 'right' }}>
-                        <Badge tone={BAND_TONE[u.band]}>{BAND_LABEL[u.band]}</Badge>
-                      </span>
-                    </div>
-                  ))}
-                </div>
+              {h => (
+                <CategoryChart height={h} orientation="vertical" maxBars={14}
+                  valueFormat={n => formatPct(n, 1)}
+                  data={byName.map(u => ({
+                    key: u.key, value: Math.min(100, u.pct), count: u.rows.length, rows: u.rows,
+                  }))}
+                  onBarClick={d => setDrill({ title: d.key, rows: d.rows })} />
               )}
             </ChartFrame>
           ) : <div />}

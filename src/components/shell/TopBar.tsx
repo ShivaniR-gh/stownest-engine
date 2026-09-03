@@ -1,14 +1,13 @@
 import { Link } from 'react-router-dom';
 import { Button, Icon, Popover } from '@/components/primitives';
-import { useAuth, DEMO_PRINCIPALS } from '@/lib/auth/AuthContext';
+import { useAuth } from '@/lib/auth/AuthContext';
 import { ROLE_LABEL } from '@/lib/permissions/policy';
-import { dataSourceKind } from '@/lib/data/store';
 import { useTheme } from './useTheme';
 
 export function TopBar({ title, crumb, actions }: {
   title: string; crumb?: { label: string; to: string }[]; actions?: React.ReactNode;
 }) {
-  const { principal, signOut, assumeDemoRole } = useAuth();
+  const { principal, signOut } = useAuth();
   const { theme, toggle } = useTheme();
 
   return (
@@ -34,7 +33,7 @@ export function TopBar({ title, crumb, actions }: {
             <Icon name="chevronDown" size={12} />
           </Button>
         )}>
-          {close => (
+          {() => (
             <>
               <div className="pop__hd">
                 <div style={{ fontSize: 'var(--fs-sm)', fontWeight: 600 }}>{principal?.name}</div>
@@ -44,19 +43,6 @@ export function TopBar({ title, crumb, actions }: {
                 </div>
               </div>
 
-              {dataSourceKind === 'demo' && (
-                <>
-                  <div className="pop__hd eyebrow" style={{ borderBottom: 0 }}>View as role</div>
-                  {Object.values(DEMO_PRINCIPALS).map(p => (
-                    <button key={p.email} className="pop__item"
-                      onClick={() => { assumeDemoRole(p.email); close(); }}>
-                      {principal?.email === p.email ? <Icon name="check" size={12} /> : <span style={{ width: 12 }} />}
-                      {p.name}
-                    </button>
-                  ))}
-                  <div className="pop__sep" />
-                </>
-              )}
 
               <button className="pop__item pop__item--danger" onClick={signOut}>
                 <Icon name="logout" size={13} /> Sign out

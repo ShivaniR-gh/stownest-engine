@@ -1,7 +1,6 @@
 import type { Row } from '@/config/types';
 import { DataError, type DataAdapter } from './adapter';
 import { SheetsAdapter } from './sheetsAdapter';
-import { DemoAdapter } from './demoAdapter';
 
 /** ---------------------------------------------------------------------------
  * Dataset cache.
@@ -30,10 +29,22 @@ const cache = new Map<string, Entry>();
 const inflight = new Map<string, Promise<void>>();
 const subs = new Map<string, Set<() => void>>();
 
-export const dataSourceKind: 'sheets' | 'demo' =
-  (import.meta.env.VITE_DATA_SOURCE as string) === 'demo' ? 'demo' : 'sheets';
+export const adapter: DataAdapter = new SheetsAdapter();
 
-export const adapter: DataAdapter = dataSourceKind === 'demo' ? new DemoAdapter() : new SheetsAdapter();
+/** ---------------------------------------------------------------------------
+ * Cache keys.
+ *
+ * A monthly dataset is not one collection but one per month: March's readings
+ * and April's are different rows and must not share a cache slot. The key
+ * carries the tab so they stay separate, while call sites for static datasets
+ * keep passing a plain id and behave exactly as before.
+ * ------------------------------------------------------------------------- */
+export const scopedId = (id: string, tab?: string) => (tab ? `${id}::${tab}` : id);
+
+export function unscope(key: string): { id: string; tab?: string } {
+  const i = key.indexOf('::');
+  return i < 0 ? { id: key } : { id: key.slice(0, i), tab: key.slice(i + 2) };
+}
 
 function emit(id: string) { subs.get(id)?.forEach(fn => fn()); }
 function set(id: string, patch: Partial<Entry>) {
@@ -57,7 +68,9 @@ export function load(id: string, opts: { force?: boolean } = {}): Promise<void> 
 
   set(id, { status: cur.rows.length ? 'refreshing' : 'loading', error: null });
 
-  const p = adapter.list(id)
+  const { id: dsId, tab } = unscope(id);
+
+  const p = adapter.list(dsId, { tab })
     .then(res => { set(id, { rows: res.rows, status: 'ready', error: null, fetchedAt: res.fetchedAt || Date.now() }); })
     .catch(err => {
       // Keep whatever rows we already had; mark the entry errored so the UI can
@@ -85,8 +98,9 @@ export const isStale = (at: number | null) => at !== null && Date.now() - at > S
  *  the API rejects, so the table never shows a change that did not persist. */
 export async function createRow(id: string, values: Row): Promise<Row> {
   const before = getEntry(id).rows;
+  const { id: dsId, tab } = unscope(id);
   try {
-    const row = await adapter.create(id, values);
+    const row = await adapter.create(dsId, values, { tab });
     set(id, { rows: [row, ...before] });
     return row;
   } catch (e) { set(id, { rows: before }); throw e; }
@@ -94,9 +108,10 @@ export async function createRow(id: string, values: Row): Promise<Row> {
 
 export async function updateRow(id: string, rowId: string, values: Row): Promise<Row> {
   const before = getEntry(id).rows;
+  const { id: dsId, tab } = unscope(id);
   set(id, { rows: before.map(r => (r.__id === rowId ? { ...r, ...values } : r)) });
   try {
-    const row = await adapter.update(id, rowId, values);
+    const row = await adapter.update(dsId, rowId, values, { tab });
     set(id, { rows: getEntry(id).rows.map(r => (r.__id === rowId ? row : r)) });
     return row;
   } catch (e) { set(id, { rows: before }); throw e; }
@@ -104,7 +119,8 @@ export async function updateRow(id: string, rowId: string, values: Row): Promise
 
 export async function deleteRow(id: string, rowId: string): Promise<void> {
   const before = getEntry(id).rows;
+  const { id: dsId, tab } = unscope(id);
   set(id, { rows: before.filter(r => r.__id !== rowId) });
-  try { await adapter.remove(id, rowId); }
+  try { await adapter.remove(dsId, rowId, { tab }); }
   catch (e) { set(id, { rows: before }); throw e; }
 }

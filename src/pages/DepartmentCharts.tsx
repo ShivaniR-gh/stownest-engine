@@ -8,14 +8,26 @@ import { Pipeline } from '@/components/charts/Pipeline';
 import { RankedList } from '@/components/charts/RankedList';
 import { Heatmap } from '@/components/charts/Heatmap';
 import { ScatterChart } from '@/components/charts/ScatterChart';
-import { ageingBuckets, crosstab, groupBy, timeSeries } from '@/lib/analytics/aggregate';
+import { CollectionsDashboard } from '@/components/metrics/CollectionsDashboard';
+import { MarketingDashboard } from '@/components/metrics/MarketingDashboard';
+import { crosstab, groupBy, timeSeries } from '@/lib/analytics/aggregate';
 import { formatINRCompact, formatInt, formatPct, toNum } from '@/lib/format';
 import type { Period } from '@/lib/analytics/period';
+import { B2CReportView } from '@/components/data/B2CReportView';
 
 interface Ctx {
   rows: Record<string, Row[]>;
   period: Period;
   drill: (title: string, datasetId: string, rows: Row[]) => void;
+  /**
+   * Which dataset the page header has selected.
+   *
+   * Only departments whose datasets need different charts read it. Collections
+   * ignores it because both of its datasets answer the same question; marketing
+   * does not, because leads and cost are two different views of the month and
+   * showing both at once would double the page.
+   */
+  activeDatasetId: string;
 }
 
 /**
@@ -31,6 +43,7 @@ export function DepartmentCharts({ department, ctx }: { department: DepartmentId
     case 'operations': return <OperationsCharts {...ctx} />;
     case 'control_tower': return <ControlTowerCharts {...ctx} />;
     case 'collections': return <CollectionsCharts {...ctx} />;
+    case 'marketing': return <MarketingCharts {...ctx} />;
     case 'finance': return <FinanceCharts {...ctx} />;
     default: return null;
   }
@@ -292,55 +305,34 @@ function ControlTowerCharts({ rows, drill }: Ctx) {
   );
 }
 
+
 /* ------------------------------- Collections ------------------------------ */
-function CollectionsCharts({ rows, period, drill }: Ctx) {
-  const inv = (rows.invoices ?? []).filter(r => String(r.payment_status) !== 'Void');
-
-  const ageing = useMemo(() => ageingBuckets(inv, 'due_at', 'amount', 'amount_paid'), [inv]);
-  const trend = useMemo(() => timeSeries(inv, 'issued_at', period, [
-    { id: 'billed', agg: 'sum', measure: 'amount' },
-    { id: 'received', agg: 'sum', measure: 'amount_paid' },
-  ]), [inv, period]);
-  const byCity = useMemo(() => groupBy(inv, 'city', { agg: 'sum', measure: 'amount' })
-    .map(g => ({ ...g, value: g.rows.reduce((a, r) => a + ((toNum(r.amount) ?? 0) - (toNum(r.amount_paid) ?? 0)), 0) }))
-    .sort((a, b) => b.value - a.value), [inv]);
-  const statusMix = useMemo(() => groupBy(inv, 'payment_status', { agg: 'sum', measure: 'amount' }), [inv]);
-
+function CollectionsCharts({ rows, activeDatasetId, drill }: Ctx) {
+  // The B2C report is two tables, not charts — its own component renders it
+  // for both Dashboard and Records so the two cannot drift apart.
+  if (activeDatasetId === 'collections_b2c_report') {
+    return <B2CReportView rows={rows.collections_b2c_report ?? []} />;
+  }
+  // The collections sheet is monthly summary data, not invoice rows: there is
+  // no due date, payment status or ageing to bucket. Ageing charts would need
+  // an invoice-level feed, so this renders the summary view instead.
   return (
-    <>
-      <div className="grid grid--split">
-        <ChartFrame title="Receivables ageing" question="How old is the money we are owed?"
-          department="collections" isEmpty={!ageing.some(b => b.value)}
-          emptyBody="Nothing outstanding against invoices with a due date.">
-          {h => <CategoryChart height={h} data={ageing} valueFormat={formatINRCompact} colorIndex={2}
-            onBarClick={d => drill(`Outstanding — ${d.key}`, 'invoices', d.rows)} />}
-        </ChartFrame>
+    <CollectionsDashboard monthly={rows.collections_monthly ?? []} drill={drill} />
+  );
+}
 
-        <ChartFrame title="Payment status" question="What share of billing is fully settled?"
-          department="collections" isEmpty={!statusMix.length}>
-          {() => <DonutChart data={statusMix} centerLabel="Billed" valueFormat={formatINRCompact}
-            onSliceClick={s => drill(`Invoices — ${s.key}`, 'invoices', s.rows)} />}
-        </ChartFrame>
-      </div>
-
-      <div className="grid grid--2" style={{ marginTop: 'var(--s4)' }}>
-        <ChartFrame title="Billed against received" question="Is collection keeping up with invoicing?"
-          department="collections" isEmpty={!trend.length}>
-          {h => <TrendChart height={h} data={trend} valueFormat={formatINRCompact}
-            series={[
-              { id: 'billed', label: 'Billed', kind: 'area', colorIndex: 0 },
-              { id: 'received', label: 'Received', kind: 'line', colorIndex: 1 },
-            ]}
-            onPointClick={p => drill(`Invoices — ${p.label}`, 'invoices', p.rows)} />}
-        </ChartFrame>
-
-        <ChartFrame title="Outstanding by city" question="Which market needs a collections push?"
-          department="collections" isEmpty={!byCity.length}>
-          {() => <RankedList items={byCity} valueFormat={formatINRCompact} metaLabel="invoices"
-            onClick={i => drill(`Outstanding — ${i.key}`, 'invoices', i.rows)} />}
-        </ChartFrame>
-      </div>
-    </>
+/* -------------------------------- Marketing ------------------------------- */
+function MarketingCharts({ rows, activeDatasetId, drill }: Ctx) {
+  // Both datasets are handed over, not just the selected one: the cost view
+  // needs lead counts to explain its own figures, and the lead view is where
+  // someone lands first. Which set of charts renders follows the dataset
+  // switcher in the page header, so there is one control rather than two.
+  return (
+    <MarketingDashboard
+      leads={rows.marketing_leads ?? []}
+      acq={rows.marketing_acquisition ?? []}
+      view={activeDatasetId === 'marketing_acquisition' ? 'acquisition' : 'leads'}
+      drill={drill} />
   );
 }
 
