@@ -237,7 +237,7 @@ function CostView({ ordered, current, previous, picker, drill }: ViewProps) {
   const cac = val(current, 'cac');
   const l2c = val(current, 'l2c_rate');
 
-  /** The three cost curves on one axis. They are all rupees per something, so
+  /** The three blended cost curves on one axis. All rupees per something, so
    *  they compare directly; CAC sitting well above the other two is the point
    *  of the chart rather than a scaling problem. */
   const costTrend = useMemo(() => ordered.slice(-12).map(r => ({
@@ -247,20 +247,28 @@ function CostView({ ordered, current, previous, picker, drill }: ViewProps) {
 
   const spendTrend = useMemo(() => ordered.slice(-12).map(r => ({
     key: String(r.month), label: monthLabel(r), rows: [r],
-    values: { spend: n(r, 'total_spend') },
+    values: Object.fromEntries(CATEGORIES.map(c => [c.key, n(r, `${c.key}_spend`)])),
   })), [ordered]);
 
-  /* Where a cost-distribution donut used to sit. Spend is a single monthly
-     figure now, so there is no distribution to draw. Customers won is the
-     honest per-category split of the same month, and it is the thing the
-     spend was buying. */
-  const customerMix = useMemo(() => CATEGORIES.map(c => ({
-    key: c.name, value: n(current, `${c.key}_customers`), count: 1, rows: [current!],
-  })).filter(d => d.value > 0), [current]);
+  /** Per-category CPL over time. This is the comparison the blended figures
+   *  cannot make, and the reason the three metrics are recorded per category
+   *  at all — B2B costing an order of magnitude more per lead than B2C is
+   *  invisible in a single blended line. */
+  const cplByCat = useMemo(() => ordered.slice(-12).map(r => ({
+    key: String(r.month), label: monthLabel(r), rows: [r],
+    values: Object.fromEntries(CATEGORIES.map(c => [c.key, n(r, `${c.key}_cpl`)])),
+  })), [ordered]);
 
-  const l2cByCat = useMemo(() => CATEGORIES.map(c => ({
-    key: c.name, value: val(current, `${c.key}_l2c`) ?? 0, count: 1, rows: [current!],
+  const cacByCat = useMemo(() => CATEGORIES.map(c => ({
+    key: c.name, value: val(current, `${c.key}_cac`) ?? 0, count: 1, rows: [current!],
   })), [current]);
+
+  /** Spend per category exists again now that it is back-computed from CPL x
+   *  leads, so the distribution is real rather than an allocation someone
+   *  chose. */
+  const spendMix = useMemo(() => CATEGORIES.map(c => ({
+    key: c.name, value: n(current, `${c.key}_spend`), count: 1, rows: [current!],
+  })).filter(d => d.value > 0), [current]);
 
   return (
     <>
@@ -274,27 +282,28 @@ function CostView({ ordered, current, previous, picker, drill }: ViewProps) {
           <Kpi i={2} label="Cost Per Lead (CPL)"
             value={cpl === null ? '—' : formatINR(cpl)}
             delta={delta(cpl ?? 0, n(previous, 'cpl'))} good="down"
-            note="Spend ÷ total leads" />
+            note="Blended, spend ÷ total leads" />
           <Kpi i={3} label="Cost Per Valid Lead (CPVL)"
             value={cpvl === null ? '—' : formatINR(cpvl)}
             delta={delta(cpvl ?? 0, n(previous, 'cpvl'))} good="down"
-            note="Spend ÷ valid leads" />
+            note="Blended, spend ÷ valid leads" />
           <Kpi i={4} label="Customer Acquisition Cost (CAC)"
             value={cac === null ? '—' : formatINR(cac)}
             delta={delta(cac ?? 0, n(previous, 'cac'))} good="down"
-            note="Spend ÷ customers won" />
+            note="Blended, spend ÷ customers" />
           <Kpi i={5} label="Lead to Customer Rate"
             value={l2c === null ? '—' : formatPct(l2c, 1)}
             delta={delta(l2c ?? 0, n(previous, 'l2c_rate'))} good="up"
             note="Customers ÷ total leads" />
         </div>
 
-        {/* Said once, plainly, rather than repeated as a caveat on every card.
-            Someone reading a blended CPL should know it is blended. */}
+        {/* The five cards above blend all three categories; the cards below are
+            as entered. Saying which is which once, here, beats repeating a
+            caveat on each of eight tiles. */}
         <p className="mk__disclosure">
-          Marketing spend is recorded once for the month, so CPL, CPVL and CAC are
-          blended across B2C, B2B and Packing &amp; Moving. Only lead-to-customer
-          rate can be compared between them.
+          CPL, CPVL and CAC are recorded as entered for each category. Spend, customers and
+          the lead-to-customer rate are computed from them and the month's lead counts, so
+          the per-category figures always sum to the totals above.
         </p>
       </section>
 
@@ -302,23 +311,27 @@ function CostView({ ordered, current, previous, picker, drill }: ViewProps) {
         <SectionHeader title="By category" note={monthLabel(current!)} />
         <div className="mk__cats">
           {CATEGORIES.map(c => {
-            const customers = n(current, `${c.key}_customers`);
-            const leads = n(current, `${c.key}_total`);
+            const cCpl = val(current, `${c.key}_cpl`);
+            const cCpvl = val(current, `${c.key}_cpvl`);
+            const cCac = val(current, `${c.key}_cac`);
             const cL2c = val(current, `${c.key}_l2c`);
-            const share = leads > 0 ? (customers / leads) * 100 : 0;
+            const leads = n(current, `${c.key}_total`);
             return (
               <div key={c.key} className="mk__cat" role="button" tabIndex={0}
                 onClick={() => drill(`${c.name} acquisition`, 'marketing_acquisition', [current!])}>
                 <div className="mk__cat-hd">
                   <span className="mk__cat-nm">{c.name}</span>
-                  <span className="mk__cat-rate num">{cL2c === null ? '—' : formatPct(cL2c, 1)}</span>
+                  <span className="mk__cat-rate num">{cCpl === null ? '—' : formatINR(cCpl)}</span>
                 </div>
                 <div className="mk__cat-bar">
-                  <span style={{ width: `${Math.min(100, share)}%` }} />
+                  <span style={{ width: `${Math.min(100, cL2c ?? 0)}%` }} />
                 </div>
                 <dl className="mk__cat-rows">
-                  <div><dt>Leads</dt><dd className="num">{formatInt(leads)}</dd></div>
-                  <div><dt>Customers</dt><dd className="num">{formatInt(customers)}</dd></div>
+                  <div><dt>Leads</dt><dd className="num">{leads ? formatInt(leads) : '—'}</dd></div>
+                  <div><dt>CPL</dt><dd className="num">{cCpl === null ? '—' : formatINR(cCpl)}</dd></div>
+                  <div><dt>CPVL</dt><dd className="num">{cCpvl === null ? '—' : formatINR(cCpvl)}</dd></div>
+                  <div><dt>CAC</dt><dd className="num">{cCac === null ? '—' : formatINR(cCac)}</dd></div>
+                  <div><dt>L2C rate</dt><dd className="num">{cL2c === null ? '—' : formatPct(cL2c, 1)}</dd></div>
                 </dl>
               </div>
             );
@@ -329,8 +342,20 @@ function CostView({ ordered, current, previous, picker, drill }: ViewProps) {
       <section className="section">
         <SectionHeader title="Analysis" />
         <div className="grid grid--split">
-          <ChartFrame title="Acquisition cost trend" department="marketing" height={260}
-            question="Is each lead and each customer getting cheaper or dearer?"
+          <ChartFrame title="Cost per lead by category" department="marketing" height={260}
+            question="Which line of business is getting dearer to reach?"
+            isEmpty={cplByCat.length < 2}>
+            {h => (
+              <TrendChart height={h} data={cplByCat} valueFormat={formatINR}
+                series={CATEGORIES.map((c, i) => ({
+                  id: c.key, label: c.name, kind: 'line' as const, colorIndex: i,
+                }))}
+                onPointClick={p => drill(`Acquisition — ${p.label}`, 'marketing_acquisition', p.rows)} />
+            )}
+          </ChartFrame>
+
+          <ChartFrame title="Blended cost trend" department="marketing" height={260}
+            question="Across everything, is a lead or a customer getting cheaper?"
             isEmpty={costTrend.length < 2}>
             {h => (
               <TrendChart height={h} data={costTrend} valueFormat={formatINR}
@@ -342,35 +367,39 @@ function CostView({ ordered, current, previous, picker, drill }: ViewProps) {
                 onPointClick={p => drill(`Acquisition — ${p.label}`, 'marketing_acquisition', p.rows)} />
             )}
           </ChartFrame>
+        </div>
 
-          <ChartFrame title="Customers won by category" department="marketing" height={260}
-            question="What did the month's spend actually buy?"
-            isEmpty={!customerMix.length}>
+        <div className="grid grid--split" style={{ marginTop: 'var(--s4)' }}>
+          <ChartFrame title="Cost distribution by category" department="marketing" height={240}
+            question="Where is the budget actually going?"
+            isEmpty={!spendMix.length}>
             {() => (
-              <DonutChart data={customerMix} centerLabel="Customers" valueFormat={formatInt}
-                onSliceClick={s => drill(`${s.key} customers`, 'marketing_acquisition', s.rows)} />
+              <DonutChart data={spendMix} centerLabel="Total Spend" valueFormat={formatINRCompact}
+                onSliceClick={s => drill(`${s.key} spend`, 'marketing_acquisition', s.rows)} />
+            )}
+          </ChartFrame>
+
+          <ChartFrame title="Customer acquisition cost by category" department="marketing" height={240}
+            question="What does a customer cost in each line of business?"
+            isEmpty={!cacByCat.some(d => d.value > 0)}>
+            {h => (
+              <CategoryChart height={h} data={cacByCat} valueFormat={formatINR}
+                colorIndex={3}
+                onBarClick={s => drill(`${s.key} acquisition`, 'marketing_acquisition', s.rows)} />
             )}
           </ChartFrame>
         </div>
 
-        <div className="grid grid--split" style={{ marginTop: 'var(--s4)' }}>
-          <ChartFrame title="Monthly marketing spend" department="marketing" height={240}
-            question="Is the budget growing, and does cost per lead follow it?"
+        <div style={{ marginTop: 'var(--s4)' }}>
+          <ChartFrame title="Spend composition over time" department="marketing" height={240}
+            question="Is the budget shifting between lines of business?"
             isEmpty={spendTrend.length < 2}>
             {h => (
-              <StackedBarChart height={h} data={spendTrend} keys={['spend']}
-                labels={{ spend: 'Marketing spend' }} valueFormat={formatINRCompact}
+              <StackedBarChart height={h} data={spendTrend}
+                keys={CATEGORIES.map(c => c.key)}
+                labels={Object.fromEntries(CATEGORIES.map(c => [c.key, c.name]))}
+                valueFormat={formatINRCompact}
                 onBarClick={d => drill(`Spend — ${d.label}`, 'marketing_acquisition', d.rows)} />
-            )}
-          </ChartFrame>
-
-          <ChartFrame title="Lead to customer rate by category" department="marketing" height={240}
-            question="Which line of business converts what it is given?"
-            isEmpty={!l2cByCat.some(d => d.value > 0)}>
-            {h => (
-              <CategoryChart height={h} data={l2cByCat} valueFormat={v => formatPct(v, 1)}
-                colorIndex={2}
-                onBarClick={s => drill(`${s.key} acquisition`, 'marketing_acquisition', s.rows)} />
             )}
           </ChartFrame>
         </div>

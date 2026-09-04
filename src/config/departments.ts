@@ -26,7 +26,7 @@ const SEED: DepartmentDef[] = [
     label: 'Sales',
     purpose: 'Lead flow, qualification and conversion into paying customers.',
     icon: 'trending',
-    metrics: ['sales.leads', 'sales.qualified', 'sales.conversions', 'sales.conv_rate', 'sales.cpl', 'sales.cac', 'sales.revenue'],
+    metrics: [],
     inWorkspace: true,
   },
   {
@@ -34,7 +34,7 @@ const SEED: DepartmentDef[] = [
     label: 'Logistics',
     purpose: 'Movement jobs, vendor allocation, cost and margin per job.',
     icon: 'truck',
-    metrics: ['log.jobs', 'log.pending', 'log.in_progress', 'log.completed', 'log.delayed', 'log.revenue', 'log.vendor_cost', 'log.margin'],
+    metrics: [],
     inWorkspace: true,
   },
   {
@@ -42,7 +42,7 @@ const SEED: DepartmentDef[] = [
     label: 'Warehouse',
     purpose: 'Space inventory, occupancy and storage movement across facilities.',
     icon: 'box',
-    metrics: ['space.total', 'space.occupied', 'space.available', 'space.utilisation', 'space.inward', 'space.outward'],
+    metrics: [],
     inWorkspace: true,
   },
   {
@@ -50,7 +50,7 @@ const SEED: DepartmentDef[] = [
     label: 'Operations',
     purpose: 'Day-to-day task execution, completion and delay management.',
     icon: 'checklist',
-    metrics: ['ops.total', 'ops.pending', 'ops.in_progress', 'ops.completed', 'ops.delayed', 'ops.on_time_rate'],
+    metrics: [],
     inWorkspace: true,
   },
   {
@@ -58,7 +58,7 @@ const SEED: DepartmentDef[] = [
     label: 'Control Tower',
     purpose: 'Live exceptions across every department that need a decision today.',
     icon: 'radar',
-    metrics: ['ops.delayed', 'log.delayed', 'coll.overdue', 'ops.on_time_rate'],
+    metrics: [],
     inWorkspace: true,
   },
   {
@@ -66,7 +66,7 @@ const SEED: DepartmentDef[] = [
     label: 'Collections',
     purpose: 'Receivables, ageing and recovery against issued invoices.',
     icon: 'receipt',
-    metrics: ['coll.receivable', 'coll.collected', 'coll.outstanding', 'coll.overdue', 'coll.rate', 'coll.dso'],
+    metrics: [],
     inWorkspace: true,
     businessLines: [{ id: 'B2C', icon: 'users' }, { id: 'B2B', icon: 'chart' }],
     customDashboard: true,
@@ -88,7 +88,7 @@ const SEED: DepartmentDef[] = [
     label: 'Finance',
     purpose: 'Revenue recognised, expenses booked and resulting profit.',
     icon: 'ledger',
-    metrics: ['fin.revenue', 'fin.expenses', 'fin.collections', 'fin.outstanding', 'fin.profit', 'fin.margin'],
+    metrics: [],
     inWorkspace: true,
   },
   {

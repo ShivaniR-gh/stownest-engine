@@ -311,7 +311,7 @@ function CollectionsCharts({ rows, activeDatasetId, drill }: Ctx) {
   // The B2C report is two tables, not charts — its own component renders it
   // for both Dashboard and Records so the two cannot drift apart.
   if (activeDatasetId === 'collections_b2c_report') {
-    return <B2CReportView rows={rows.collections_b2c_report ?? []} />;
+        return <B2CReportView rows={rows.collections_b2c_report ?? []} variant="dashboard" />;
   }
   // The collections sheet is monthly summary data, not invoice rows: there is
   // no due date, payment status or ageing to bucket. Ageing charts would need

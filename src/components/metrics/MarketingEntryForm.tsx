@@ -9,32 +9,28 @@ import type { Row } from '@/config/types';
 /** ---------------------------------------------------------------------------
  * Monthly marketing entry.
  *
- * Spend is entered once, above the categories, because that is the only way it
- * can be observed — the ad accounts report one account-level total and the
- * campaigns carry no line-of-business label. Cost metrics are therefore
- * blended; only lead-to-customer rate stays meaningful per category, since it
- * divides customers by leads and never touches spend.
- *
  * One form, two rows written: lead performance and acquisition cost for the
- * same month. They are separate tabs because the team reads them separately,
- * but they cannot be entered separately — CPL, CPVL, CAC and the lead-to-
- * customer rate are all spend or customers divided by a lead count, so an
- * acquisition row without its lead row has nothing to divide by.
+ * same month. Separate tabs because the team reads them separately, but they
+ * cannot be entered separately — the blended figures divide the month's spend
+ * by lead counts, so an acquisition row without its lead row has nothing to
+ * divide by.
  *
- *   Total leads   = valid + invalid                     (per category)
- *   Valid rate    = valid ÷ total × 100                 (per category)
- *   L2C rate      = customers ÷ total leads × 100       (per category)
- *   CPL           = month spend ÷ total leads           (blended)
- *   CPVL          = month spend ÷ valid leads           (blended)
- *   CAC           = month spend ÷ customers won         (blended)
+ * Per-category CPL, CPVL and CAC are typed, not computed. Each would need a
+ * per-category spend, which the ad accounts cannot report — but the team
+ * already maintains these figures, so the platform records what they hold.
  *
- * Only the ten entered figures are typed. Everything above is
- * computed here for the live preview and recomputed server-side on save,
- * because a figure the browser calculates is a figure the browser can be
- * wrong about.
+ * Typed:     valid, invalid, CPL, CPVL, CAC            (per category)
+ * Computed:  total leads, valid rate, spend, customers,
+ *            L2C rate                                   (per category)
+ *            spend, blended CPL, CPVL, CAC, L2C rate    (month)
  *
- * Order matters on save: leads first. The acquisition deriver reads the lead
- * row for the month and refuses if it is missing.
+ * Spend is not entered. Leads x CPL is what a category spent, so the rupee
+ * figures fall out of the metrics rather than sitting beside them where the
+ * two could disagree with nothing to say which was wrong.
+ *
+ * Valid leads x CPVL gives the same spend by a second route, and the form
+ * compares the two. A gap means a digit is wrong in one of the columns; the
+ * warning is shown, and what was typed is still what gets saved.
  * ------------------------------------------------------------------------- */
 
 const CATEGORIES = [
@@ -44,8 +40,11 @@ const CATEGORIES = [
 ] as const;
 
 type CatKey = typeof CATEGORIES[number]['key'];
+type FieldKey = 'valid' | 'invalid' | 'cpl' | 'cpvl' | 'cac';
 
 const n = (v: string) => toNum(v) ?? 0;
+const has = (v: string) => String(v ?? '').trim() !== '';
+
 const monthKey = (v: unknown): string => {
   const d = parseDate(v);
   return d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` : '';
@@ -62,13 +61,12 @@ const toISOMonth = (v: unknown): string => {
   return raw.slice(0, 10);
 };
 
-type Entered = Record<CatKey, { valid: string; invalid: string; customers: string }>;
+type Entered = Record<CatKey, Record<FieldKey, string>>;
 
-const BLANK: Entered = {
-  b2c: { valid: '', invalid: '', customers: '' },
-  b2b: { valid: '', invalid: '', customers: '' },
-  pm: { valid: '', invalid: '', customers: '' },
-};
+const blankCat = (): Record<FieldKey, string> =>
+  ({ valid: '', invalid: '', cpl: '', cpvl: '', cac: '' });
+
+const BLANK: Entered = { b2c: blankCat(), b2b: blankCat(), pm: blankCat() };
 
 export function MarketingEntryForm({ existing, onDone, onCancel }: {
   /** A row from either marketing dataset. The month is taken from it and the
@@ -82,11 +80,10 @@ export function MarketingEntryForm({ existing, onDone, onCancel }: {
   const allAcq = byId.marketing_acquisition ?? [];
 
   const [month, setMonth] = useState<string>(() => (existing ? toISOMonth(existing.month) : ''));
-  const [spend, setSpend] = useState<string>('');
 
   /** The two rows for the month in the form, whichever table it was opened
-   *  from. Either may be absent — a month can legitimately have leads
-   *  recorded before its spend is known. */
+   *  from. Either may be absent — a month can legitimately have leads recorded
+   *  before its costs are known. */
   const leadRow = useMemo(
     () => allLeads.find(r => monthKey(r.month) === monthKey(month)) ?? null,
     [allLeads, month]);
@@ -96,24 +93,26 @@ export function MarketingEntryForm({ existing, onDone, onCancel }: {
 
   /**
    * Prefilled once, from whichever rows existed when the form opened. Not kept
-   * in sync with the rows afterwards: the user is editing, and rewriting their
-   * inputs underneath them because a background refresh landed is worse than
-   * a slightly stale starting point.
+   * in sync afterwards: the user is editing, and rewriting their inputs
+   * underneath them because a background refresh landed is worse than a
+   * slightly stale starting point.
    */
   const [d, setD] = useState<Entered>(BLANK);
   const [seeded, setSeeded] = useState(false);
 
   if (!seeded && existing && (leadRow || acqRow)) {
     const v = (r: Row | null, k: string) => (r && r[k] != null ? String(r[k]) : '');
-    setD({
-      b2c: { valid: v(leadRow, 'b2c_valid'), invalid: v(leadRow, 'b2c_invalid'),
-             customers: v(acqRow, 'b2c_customers') },
-      b2b: { valid: v(leadRow, 'b2b_valid'), invalid: v(leadRow, 'b2b_invalid'),
-             customers: v(acqRow, 'b2b_customers') },
-      pm: { valid: v(leadRow, 'pm_valid'), invalid: v(leadRow, 'pm_invalid'),
-            customers: v(acqRow, 'pm_customers') },
-    });
-    setSpend(v(acqRow, 'total_spend'));
+    const next = {} as Entered;
+    for (const c of CATEGORIES) {
+      next[c.key] = {
+        valid: v(leadRow, `${c.key}_valid`),
+        invalid: v(leadRow, `${c.key}_invalid`),
+        cpl: v(acqRow, `${c.key}_cpl`),
+        cpvl: v(acqRow, `${c.key}_cpvl`),
+        cac: v(acqRow, `${c.key}_cac`),
+      };
+    }
+    setD(next);
     setSeeded(true);
   }
 
@@ -123,52 +122,86 @@ export function MarketingEntryForm({ existing, onDone, onCancel }: {
    *  exactly what is on the sheet rather than "something went wrong". */
   const [partial, setPartial] = useState(false);
 
-  const set = (c: CatKey, f: keyof Entered[CatKey]) => (e: { target: { value: string } }) =>
+  const set = (c: CatKey, f: FieldKey) => (e: { target: { value: string } }) =>
     setD(prev => ({ ...prev, [c]: { ...prev[c], [f]: e.target.value } }));
 
   const calc = useMemo(() => {
-    const totalSpend = n(spend);
-
     const per = CATEGORIES.map(c => {
-      const valid = n(d[c.key].valid);
-      const invalid = n(d[c.key].invalid);
-      const customers = n(d[c.key].customers);
+      const f = d[c.key];
+      const valid = n(f.valid);
+      const invalid = n(f.invalid);
       const total = valid + invalid;
+      const cpl = n(f.cpl);
+      const cpvl = n(f.cpvl);
+      const cac = n(f.cac);
+
+      // Two routes to the same rupee figure. The first is authoritative
+      // because total leads is the larger, better-populated denominator; the
+      // second exists to disagree with it when a digit is wrong.
+      const spend = total > 0 && cpl > 0 ? total * cpl : 0;
+      const spendViaValid = valid > 0 && cpvl > 0 ? valid * cpvl : 0;
+      const customers = spend > 0 && cac > 0 ? Math.round(spend / cac) : 0;
+
       return {
-        ...c, valid, invalid, customers, total,
+        ...c, valid, invalid, total, cpl, cpvl, cac, spend, spendViaValid, customers,
         validRate: total > 0 ? (valid / total) * 100 : null,
-        // Divides customers by leads, so it needs no spend and stays real per
-        // category. The only comparison across the three lines that survives.
-        l2c: total > 0 ? (customers / total) * 100 : null,
+        l2c: total > 0 && customers > 0 ? (customers / total) * 100 : null,
       };
     });
 
     const totalValid = per.reduce((a, c) => a + c.valid, 0);
     const totalInvalid = per.reduce((a, c) => a + c.invalid, 0);
     const totalLeads = totalValid + totalInvalid;
+    const totalSpend = per.reduce((a, c) => a + c.spend, 0);
     const totalCustomers = per.reduce((a, c) => a + c.customers, 0);
 
     return {
       per, totalValid, totalInvalid, totalLeads, totalSpend, totalCustomers,
       validRate: totalLeads > 0 ? (totalValid / totalLeads) * 100 : null,
-      cpl: totalLeads > 0 ? totalSpend / totalLeads : null,
-      cpvl: totalValid > 0 ? totalSpend / totalValid : null,
+      cpl: totalLeads > 0 && totalSpend > 0 ? totalSpend / totalLeads : null,
+      cpvl: totalValid > 0 && totalSpend > 0 ? totalSpend / totalValid : null,
       cac: totalCustomers > 0 ? totalSpend / totalCustomers : null,
-      l2c: totalLeads > 0 ? (totalCustomers / totalLeads) * 100 : null,
+      l2c: totalLeads > 0 && totalCustomers > 0 ? (totalCustomers / totalLeads) * 100 : null,
     };
-  }, [d, spend]);
+  }, [d]);
 
+  /* Blocking: the row would be arithmetically impossible. */
   const problems: string[] = [];
   for (const c of calc.per) {
     if (c.valid < 0 || c.invalid < 0) problems.push(`${c.name} lead counts cannot be negative.`);
+    for (const [label, v] of [['CPL', c.cpl], ['CPVL', c.cpvl], ['CAC', c.cac]] as const) {
+      if (v < 0) problems.push(`${c.name} ${label} cannot be negative.`);
+    }
     if (c.customers > c.total && c.total > 0) {
-      problems.push(`${c.name} has more customers (${c.customers}) than leads (${c.total}).`);
+      problems.push(
+        `${c.name} CAC implies ${c.customers} customers from ${c.total} leads — more customers than leads.`);
     }
   }
-  if (calc.totalLeads === 0 && calc.totalSpend > 0) {
-    problems.push('Spend was entered with no leads against it, so no cost metric can be computed.');
+
+  /* Non-blocking: the row saves, but something looks wrong and only the person
+     entering it can tell whether it actually is. */
+  const checks: string[] = [];
+  for (const c of calc.per) {
+    // Valid leads are a subset of total, so cost per valid lead can never sit
+    // below cost per lead. Inverted means the two columns were read the wrong
+    // way round.
+    if (c.cpl > 0 && c.cpvl > 0 && c.cpvl < c.cpl) {
+      checks.push(`${c.name} CPVL (₹${c.cpvl}) is below its CPL (₹${c.cpl}) — these may be swapped.`);
+    }
+    // leads x CPL and valid x CPVL are the same spend by two routes. They
+    // should agree; a gap means a digit is wrong in one of them.
+    if (c.spend > 0 && c.spendViaValid > 0) {
+      const gap = Math.abs(c.spend - c.spendViaValid) / c.spend;
+      if (gap > 0.05) {
+        checks.push(
+          `${c.name} CPL implies ₹${Math.round(c.spend).toLocaleString('en-IN')} of spend but its CPVL ` +
+          `implies ₹${Math.round(c.spendViaValid).toLocaleString('en-IN')} (${(gap * 100).toFixed(0)}% apart).`);
+      }
+    }
+    if (c.cac > 0 && c.cpl > 0 && c.cac < c.cpl) {
+      checks.push(`${c.name} CAC is below its CPL, which would mean more customers than leads.`);
+    }
   }
-  if (calc.totalSpend < 0) problems.push('Marketing spend cannot be negative.');
 
   const submit = async () => {
     setError(null);
@@ -178,15 +211,20 @@ export function MarketingEntryForm({ existing, onDone, onCancel }: {
     setBusy(true);
 
     const leadPayload: Row = { month };
-    const acqPayload: Row = { month, total_spend: spend || '0' };
+    const acqPayload: Row = { month };
     for (const c of CATEGORIES) {
-      leadPayload[`${c.key}_valid`] = d[c.key].valid || '0';
-      leadPayload[`${c.key}_invalid`] = d[c.key].invalid || '0';
-      acqPayload[`${c.key}_customers`] = d[c.key].customers || '0';
+      const f = d[c.key];
+      leadPayload[`${c.key}_valid`] = f.valid || '0';
+      leadPayload[`${c.key}_invalid`] = f.invalid || '0';
+      // Blank stays blank. A metric nobody supplied should read "Data
+      // unavailable" downstream, not zero.
+      acqPayload[`${c.key}_cpl`] = has(f.cpl) ? f.cpl : '';
+      acqPayload[`${c.key}_cpvl`] = has(f.cpvl) ? f.cpvl : '';
+      acqPayload[`${c.key}_cac`] = has(f.cac) ? f.cac : '';
     }
 
     try {
-      // Leads first, always. The acquisition deriver reads this row to get its
+      // Leads first, always. The acquisition deriver reads this row for its
       // denominators, so the reverse order fails on a genuinely new month.
       if (leadRow?.__id) {
         await updateRow('marketing_leads', String(leadRow.__id), leadPayload);
@@ -208,8 +246,8 @@ export function MarketingEntryForm({ existing, onDone, onCancel }: {
     } catch (e) {
       // Two tabs cannot be written atomically, so say plainly what landed
       // rather than implying the whole save failed. Reopening this month and
-      // saving again completes it — both writes are keyed on the month, so
-      // the retry updates rather than duplicates.
+      // saving again completes it — both writes key on the month, so the retry
+      // updates rather than duplicates.
       setBusy(false);
       setPartial(true);
       setError(
@@ -233,31 +271,25 @@ export function MarketingEntryForm({ existing, onDone, onCancel }: {
           {error && <div className={`mk__err${partial ? ' mk__err--partial' : ''}`} role="alert">{error}</div>}
 
           <section className="mk__block mk__block--head">
-            <div className="mk__grid">
-              <div className="formrow">
-                <label className="formrow__lb" htmlFor="mk-month">Month</label>
-                {/* The month is the record id in both tabs, so it is fixed once
-                    saved — changing it here would edit one month into another. */}
-                <input id="mk-month" className="field" type="date" value={month}
-                  onChange={e => setMonth(e.target.value)} disabled={Boolean(existing)} />
-                <span className="formrow__hint">First of the month.</span>
-              </div>
-
-              {/* Sits above the categories, not inside them, because it is one
-                  figure for the whole month. Putting a spend box under each
-                  category would invite someone to split a number that has no
-                  split. */}
-              <Field label="Total Marketing Spend" money value={spend}
-                onChange={e => setSpend(e.target.value)}
-                hint="All channels, all categories." />
+            <div className="formrow" style={{ maxWidth: 240 }}>
+              <label className="formrow__lb" htmlFor="mk-month">Month</label>
+              {/* The month is the record id in both tabs, so it is fixed once
+                  saved — changing it would edit one month into another. */}
+              <input id="mk-month" className="field" type="date" value={month}
+                onChange={e => setMonth(e.target.value)} disabled={Boolean(existing)} />
+              <span className="formrow__hint">First of the month.</span>
             </div>
 
+            {/* Spend has no input. It is leads x CPL, so it appears here as a
+                result of the categories below rather than as a figure someone
+                could type into disagreement with them. */}
             <dl className="mk__calc">
               <div><dt>Total leads</dt><dd className="num">{calc.totalLeads || '—'}</dd></div>
+              <div><dt>Total spend</dt><dd className="num">{money(calc.totalSpend || null)}</dd></div>
               <div><dt>Blended CPL</dt><dd className="num">{money(calc.cpl)}</dd></div>
               <div><dt>Blended CPVL</dt><dd className="num">{money(calc.cpvl)}</dd></div>
               <div><dt>Blended CAC</dt><dd className="num">{money(calc.cac)}</dd></div>
-              <div><dt>L2C rate</dt><dd className="num">{calc.l2c === null ? '—' : `${calc.l2c.toFixed(1)}%`}</dd></div>
+              <div><dt>L2C rate</dt><dd className="num">{pctOf(calc.l2c)}</dd></div>
             </dl>
           </section>
 
@@ -269,14 +301,18 @@ export function MarketingEntryForm({ existing, onDone, onCancel }: {
                 <div className="mk__grid">
                   <Field label="Valid Leads" value={d[c.key].valid} onChange={set(c.key, 'valid')} />
                   <Field label="Invalid Leads" value={d[c.key].invalid} onChange={set(c.key, 'invalid')} />
-                  <Field label="Customers Won" value={d[c.key].customers} onChange={set(c.key, 'customers')} />
+                  <Field label="CPL" money value={d[c.key].cpl} onChange={set(c.key, 'cpl')} />
+                  <Field label="CPVL" money value={d[c.key].cpvl} onChange={set(c.key, 'cpvl')} />
+                  <Field label="CAC" money value={d[c.key].cac} onChange={set(c.key, 'cac')} />
                 </div>
-                {/* No CPL, CPVL or CAC here — each would need a per-category
-                    spend to divide, and spend is only known for the month. */}
+                {/* Consequences of the five typed figures, not more inputs.
+                    Spend is leads x CPL; customers is that over CAC. */}
                 <dl className="mk__calc">
                   <div><dt>Total leads</dt><dd className="num">{p.total || '—'}</dd></div>
-                  <div><dt>Valid rate</dt><dd className="num">{p.validRate === null ? '—' : `${p.validRate.toFixed(1)}%`}</dd></div>
-                  <div><dt>L2C rate</dt><dd className="num">{p.l2c === null ? '—' : `${p.l2c.toFixed(1)}%`}</dd></div>
+                  <div><dt>Valid rate</dt><dd className="num">{pctOf(p.validRate)}</dd></div>
+                  <div><dt>Spend</dt><dd className="num">{money(p.spend || null)}</dd></div>
+                  <div><dt>Customers</dt><dd className="num">{p.customers || '—'}</dd></div>
+                  <div><dt>L2C rate</dt><dd className="num">{pctOf(p.l2c)}</dd></div>
                 </dl>
               </section>
             );
@@ -287,20 +323,29 @@ export function MarketingEntryForm({ existing, onDone, onCancel }: {
             <dl className="mk__calc">
               <div><dt>Total leads</dt><dd className="num">{calc.totalLeads || '—'}</dd></div>
               <div><dt>Valid</dt><dd className="num">{calc.totalValid || '—'}</dd></div>
-              <div><dt>Valid rate</dt><dd className="num">{calc.validRate === null ? '—' : `${calc.validRate.toFixed(1)}%`}</dd></div>
+              <div><dt>Valid rate</dt><dd className="num">{pctOf(calc.validRate)}</dd></div>
               <div><dt>Customers</dt><dd className="num">{calc.totalCustomers || '—'}</dd></div>
               <div><dt>Total spend</dt><dd className="num">{money(calc.totalSpend || null)}</dd></div>
             </dl>
           </section>
 
+          {checks.length > 0 && (
+            <ul className="mk__warn">
+              {checks.map(w => <li key={w}>{w}</li>)}
+              <li className="mk__warn-foot">
+                These do not block saving — the entered figures are kept as typed.
+              </li>
+            </ul>
+          )}
+
           <p className="mk__note">
             Saves two rows: lead performance and acquisition cost for this month.
-            Cost metrics are blended across all three categories, because spend is
-            recorded once for the month rather than per category.
+            CPL, CPVL and CAC are recorded as entered. Spend, customers, lead-to-customer
+            rate and the blended figures are calculated from them.
           </p>
 
           {problems.length > 0 && (
-            <ul className="mk__warn">{problems.map(p => <li key={p}>{p}</li>)}</ul>
+            <ul className="mk__warn mk__warn--block">{problems.map(p => <li key={p}>{p}</li>)}</ul>
           )}
         </div>
 
@@ -316,6 +361,7 @@ export function MarketingEntryForm({ existing, onDone, onCancel }: {
 }
 
 const money = (v: number | null) => (v === null ? '—' : `₹${Math.round(v).toLocaleString('en-IN')}`);
+const pctOf = (v: number | null) => (v === null ? '—' : `${v.toFixed(1)}%`);
 
 function Field({ label, value, onChange, money: isMoney, hint }: {
   label: string; value: string; hint?: string; money?: boolean;

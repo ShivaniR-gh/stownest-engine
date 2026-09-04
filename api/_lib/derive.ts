@@ -111,38 +111,32 @@ const DERIVERS: Record<string, Deriver> = {
         'Pickup and delivery together exceed the month total, leaving storage rental negative.');
     }
 
-        const pct = (part: number, whole: number) => (whole > 0 ? ((part / whole) * 100).toFixed(2) : '0');
+    const pct = (part: number, whole: number) => (whole > 0 ? ((part / whole) * 100).toFixed(2) : '0');
+    const pending = raised - collected;
 
     /**
-     * Entered value wins; the computed figure is only a fallback for a blank
-     * field. Recomputing over what the team typed would let the percentage
-     * contradict the amount printed beside it.
+     * Gap % and Share in revenue divide by Collection Amount, matching the
+     * team's sheet (AP5 = AP6/AP3*100).
+     *
+     * Worth knowing when reading these: Collection Amount is collected against
+     * everything outstanding, while Pending is this month alone, so the two
+     * cover different periods. The three segment shares also stop summing to
+     * 100% as a result. Both are consequences of the sheet's definition, not
+     * of the code — the earlier columns of the same sheet divide by Raised
+     * instead, and those do sum. Change the denominator here if the team
+     * settles on the older formula.
      */
-    const entered = (key: string, fallback: number) => {
-      const raw = String(values[key] ?? '').trim();
-      return raw === '' ? fallback : num(values[key]);
-    };
-
-    /**
-     * Gap % divides by Raised Invoice amount, matching the sheet's row 7
-     * (=C6/C5*100). Checked against the columns that already hold values:
-     * March 6.678613, April 7.426019, May 7.778137 all reproduce to six
-     * decimals. Dividing by Collection Amount gives 5.10 / 6.54 / 6.36 for
-     * those same months, which matches nothing in the sheet. Collection
-     * Amount is collected against everything outstanding while Pending is
-     * this month alone, so that denominator mixes two periods.
-     */
-    const pending = entered('pending_amount', raised - collected);
-    const pkGap = entered('pk_gap', pkR - pkC);
-
+    const total = num(values.collection_amount);
 
     return {
       ...values,
-      gap_pct: pct(pending, raised),
-      pk_gap_pct: pct(pkGap, pkR), pk_share: pct(pkC, collected),
-      dl_gap: String(dlR - dlC), dl_gap_pct: pct(dlR - dlC, dlR), dl_share: pct(dlC, collected),
+      pending_amount: String(pending),
+      gap_pct: pct(pending, total),
+
+      pk_gap: String(pkR - pkC), pk_gap_pct: pct(pkR - pkC, pkR), pk_share: pct(pkC, total),
+      dl_gap: String(dlR - dlC), dl_gap_pct: pct(dlR - dlC, dlR), dl_share: pct(dlC, total),
       st_raised: String(stR), st_collected: String(stC),
-      st_gap: String(stR - stC), st_gap_pct: pct(stR - stC, stR), st_share: pct(stC, collected),
+      st_gap: String(stR - stC), st_gap_pct: pct(stR - stC, stR), st_share: pct(stC, total),
     };
   },
 
@@ -184,28 +178,19 @@ const DERIVERS: Record<string, Deriver> = {
       entered_by: principal.email,
     };
   },
-    collections_b2c_report: async (values, { principal }) => {
-    const cities = ['blr', 'hyd', 'che', 'pun', 'mum', 'del', 'kol', 'gur'];
-    const sum = (suffix: string) =>
-      cities.reduce((a, c) => a + num(values[`${c}_${suffix}`]), 0);
-    return {
-      ...values,
-      raised_amount: String(sum('invoice')),
-      collection_amount: String(sum('collection')),
-      entered_by: principal.email,
-    };
-  },
+
   /**
    * Acquisition cost.
    *
-   * Spend is recorded once for the month, because that is the only way it can
-   * be observed: the ad accounts report an account-level total and the
-   * campaigns carry no line-of-business label. So the cost metrics here are
-   * blended across all three categories, and there are no per-category ones.
+   * Spend is always recorded once for the month, and optionally split across
+   * the three categories. Whether the split is available depends on how the ad
+   * campaigns are named, which can differ month to month — so it is optional
+   * rather than required, and its absence leaves per-category CPL, CPVL and
+   * CAC blank instead of guessed.
    *
-   * Lead-to-customer rate is the exception that survives — it divides
-   * customers by leads and never touches spend, so it stays meaningful per
-   * category and is the one place the three lines can still be compared.
+   * Lead-to-customer rate never depends on it: customers divided by leads, so
+   * the three lines can always be compared on conversion even in a month where
+   * nobody could say what each one cost.
    *
    * The lead counts are read at write time and snapshotted, not joined at read
    * time: if someone corrects March's leads in June, March's CPL as recorded
@@ -227,51 +212,80 @@ const DERIVERS: Record<string, Deriver> = {
     if (!lead) {
       throw new HttpError(400,
         `No lead performance row exists for ${month}. Enter the lead counts for that month first — ` +
-        `cost per lead cannot be computed without them.`);
+        `spend and customers are computed against them.`);
     }
 
     /** Blank rather than a misleading zero when the denominator is absent. */
-    const per = (spend: number, denom: number) => (denom > 0 ? (spend / denom).toFixed(0) : '');
+    const per = (a: number, b: number) => (b > 0 ? (a / b).toFixed(0) : '');
     const pct = (part: number, whole: number) => (whole > 0 ? ((part / whole) * 100).toFixed(1) : '');
 
-    const totalSpend = num(values.total_spend);
-    if (totalSpend < 0) throw new HttpError(400, 'Marketing spend cannot be negative.');
-
-    const cat = (p: string) => {
-      const customers = num(values[`${p}_customers`]);
-      const total = num(lead[`${p}_total`]);
-
-      if (customers > total && total > 0) {
-        throw new HttpError(400,
-          `${p.toUpperCase()} customers (${customers}) cannot exceed its ${total} leads for ${month}.`);
+    for (const k of ['cpl', 'cpvl', 'cac'] as const) {
+      for (const p of ['b2c', 'b2b', 'pm'] as const) {
+        if (num(values[`${p}_${k}`]) < 0) {
+          throw new HttpError(400, `${p.toUpperCase()} ${k.toUpperCase()} cannot be negative.`);
+        }
       }
-      return { customers, l2c: pct(customers, total) };
-    };
+    }
 
-    const b2c = cat('b2c');
-    const b2b = cat('b2b');
-    const pm = cat('pm');
+    /**
+     * Three typed metrics per category expand into spend, customers and
+     * conversion rate:
+     *
+     *   spend     = total leads x CPL      (also valid leads x CPVL)
+     *   customers = spend / CAC
+     *   L2C rate  = customers / total leads
+     *
+     * Spend is not entered anywhere. Back-computing it from CPL is what keeps
+     * the row consistent — a typed monthly total and three typed CPLs could
+     * disagree, and nothing would say which was wrong. Here the arithmetic
+     * only runs one way, so the parts always sum to the whole.
+     *
+     * Customers are implied rather than counted. The counted figure lives in
+     * HubSpot as deals reaching Confirmed; this is what the entered CAC says
+     * it should be, which is a different claim and is labelled as one.
+     */
+    const out: Record<string, string> = { ...values };
+    let totalSpend = 0;
+    let totalCustomers = 0;
 
-    const totalCustomers = b2c.customers + b2b.customers + pm.customers;
+    for (const p of ['b2c', 'b2b', 'pm'] as const) {
+      const catLeads = num(lead[`${p}_total`]);
+      const cpl = num(values[`${p}_cpl`]);
+      const cac = num(values[`${p}_cac`]);
+
+      const spend = catLeads > 0 && cpl > 0 ? catLeads * cpl : 0;
+      const customers = spend > 0 && cac > 0 ? Math.round(spend / cac) : 0;
+
+      if (customers > catLeads && catLeads > 0) {
+        throw new HttpError(400,
+          `${p.toUpperCase()} CAC of ${cac} against a CPL of ${cpl} implies ${customers} customers ` +
+          `from ${catLeads} leads for ${month}, which is more customers than leads.`);
+      }
+
+      out[`${p}_spend`] = spend > 0 ? String(Math.round(spend)) : '';
+      out[`${p}_customers`] = customers > 0 ? String(customers) : '';
+      out[`${p}_l2c`] = pct(customers, catLeads);
+
+      totalSpend += spend;
+      totalCustomers += customers;
+    }
+
     const allLeads = num(lead.total_leads);
     const allValid = num(lead.total_valid);
 
-    return {
-      ...values,
-      total_customers: String(totalCustomers),
+    out.total_spend = totalSpend > 0 ? String(Math.round(totalSpend)) : '';
+    out.total_customers = totalCustomers > 0 ? String(totalCustomers) : '';
 
-      b2c_l2c: b2c.l2c, b2b_l2c: b2b.l2c, pm_l2c: pm.l2c,
+    out.leads_at_entry = String(allLeads);
+    out.valid_at_entry = String(allValid);
 
-      leads_at_entry: String(allLeads),
-      valid_at_entry: String(allValid),
+    out.cpl = per(totalSpend, allLeads);
+    out.cpvl = per(totalSpend, allValid);
+    out.cac = per(totalSpend, totalCustomers);
+    out.l2c_rate = pct(totalCustomers, allLeads);
 
-      cpl: per(totalSpend, allLeads),
-      cpvl: per(totalSpend, allValid),
-      cac: per(totalSpend, totalCustomers),
-      l2c_rate: pct(totalCustomers, allLeads),
-
-      entered_by: principal.email,
-    };
+    out.entered_by = principal.email;
+    return out;
   },
 };
 
@@ -282,22 +296,48 @@ const num = (v: unknown): number => {
 };
 
 /**
- * "YYYY-MM" for a month cell, however the sheet hands it back.
+ * "YYYY-MM" for a month cell, however Sheets hands it back.
  *
- * The two marketing tabs are joined on this, and Sheets will return the same
- * month as an ISO string, a locale date or plain text depending on how the
- * cell was formatted. Comparing raw strings silently fails to match and the
- * acquisition row is then refused for a month that plainly exists.
+ * Three shapes reach this, and the third is the one that bit:
+ *
+ *   "2026-02-01"  written by us, read back from a text-formatted cell
+ *   "01/02/2026"  a locale string, if someone reformatted the column
+ *   46054         a real date cell — readDataset asks for UNFORMATTED_VALUE,
+ *                 so Sheets returns its own serial, not a string
+ *
+ * The serial is days since 1899-12-30. Without handling it, the acquisition
+ * deriver could not find the lead row it had written moments earlier, and
+ * reported the month as missing.
+ *
+ * Everything below reads the date in UTC. The serial converts to UTC midnight,
+ * and a server behind UTC calling getMonth() on that lands on the previous
+ * day — which for the first of the month is the previous month, silently
+ * filing January's costs against December.
  */
 const monthKey = (v: unknown): string => {
+  const fromDate = (d: Date) =>
+    `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+
+  // Sheets serial. Bounded to a plausible range so a bare count in a
+  // mistyped column cannot be read as a date.
+  const asNum = typeof v === 'number' ? v : Number(String(v ?? '').trim());
+  if (Number.isFinite(asNum) && asNum > 20000 && asNum < 80000) {
+    return fromDate(new Date(Math.round((asNum - 25569) * 86400000)));
+  }
+
   const raw = String(v ?? '').trim();
   if (!raw) return '';
+
   const iso = /^(\d{4})-(\d{2})/.exec(raw);
   if (iso) return `${iso[1]}-${iso[2]}`;
+
+  // A bare run of digits is either a serial, already handled above, or junk.
+  // Date.parse reads "916" as the year 916 and would hand back a confident
+  // "916-01" for a lead count that landed in the wrong column.
+  if (/^\d+$/.test(raw)) return '';
+
   const t = Date.parse(raw);
-  if (!Number.isFinite(t)) return '';
-  const d = new Date(t);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  return Number.isFinite(t) ? fromDate(new Date(t)) : '';
 };
 
 export async function derive(

@@ -168,3 +168,32 @@
   padding: var(--s4); border-radius: var(--r-md);
   border: 1px solid var(--line); background: var(--surface);
 }
+
+/* Optional spend split. Sunk panel so it reads as secondary to the month's
+   total above it — filling it is a bonus, not a requirement. */
+.mk__split {
+  margin: var(--s4) 0 0; padding: var(--s3) var(--s4);
+  border-radius: var(--r-md);
+  background: var(--surface-sunk); border: 1px dashed var(--line-strong);
+}
+.mk__split-hd {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: var(--s3); margin-bottom: var(--s3);
+}
+.mk__split-hd .mk__sec { margin: 0; }
+.mk__split-hd em { font-style: normal; text-transform: none; letter-spacing: 0; opacity: .7; }
+.mk__split-sum { font-size: var(--fs-sm); font-variant-numeric: tabular-nums; }
+.mk__split-sum--ok { color: var(--pos); }
+.mk__split-sum--off { color: var(--signal); }
+.mk__hint { margin: var(--s3) 0 0; font-size: var(--fs-xs); color: var(--ink-500); }
+
+/* Blocking problems are red; the soft cross-checks stay amber. A row that
+   cannot be saved and a row that merely looks odd should not read alike. */
+.mk__warn--block {
+  background: var(--neg-soft); color: var(--neg); border: 1px solid var(--neg);
+}
+.mk__warn-foot {
+  margin-top: var(--s2); padding-top: var(--s2);
+  border-top: 1px solid currentColor; opacity: .7; list-style: none;
+  margin-left: calc(var(--s6) * -1 + var(--s4));
+}

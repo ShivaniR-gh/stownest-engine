@@ -43,17 +43,17 @@ const CITIES = [
  * here is a row someone will query.
  */
 const SUMMARY: {
-  key: string; label: string; money: boolean; emoji: string;
+  key: string; label: string; money: boolean;
   tint: string; strong?: boolean;
 }[] = [
-  { key: 'customers_raised', label: 'Total Customers Raised', money: false, emoji: '📄', tint: '#3b82f6' },
-  { key: 'raised_amount', label: 'Total Raised Amount', money: true, emoji: '💰', tint: '#6366f1' },
-  { key: 'collected_customers', label: 'Total Collected Customers', money: false, emoji: '✅', tint: '#10b981' },
-  { key: 'collection_amount', label: 'Total Collection Amount', money: true, emoji: '💵', tint: '#059669', strong: true },
-  { key: 'pending_customers', label: 'Pending Customers', money: false, emoji: '📋', tint: '#f59e0b' },
-  { key: 'pending_amount', label: 'Pending Amount', money: true, emoji: '🧾', tint: '#ea580c' },
-  { key: 'receivable_customers_60', label: 'Receivable Customers (>60 Days)', money: false, emoji: '⏳', tint: '#a855f7' },
-  { key: 'receivables_amount_60', label: 'Receivables Amount (>60 Days)', money: true, emoji: '⌛', tint: '#9333ea' },
+  { key: 'customers_raised', label: 'Total Customers Raised', money: false, tint: '#3b82f6' },
+  { key: 'raised_amount', label: 'Total Raised Amount', money: true, tint: '#6366f1' },
+  { key: 'collected_customers', label: 'Total Collected Customers', money: false, tint: '#10b981' },
+  { key: 'collection_amount', label: 'Total Collection Amount', money: true, tint: '#059669', strong: true },
+  { key: 'pending_customers', label: 'Pending Customers', money: false, tint: '#f59e0b' },
+  { key: 'pending_amount', label: 'Pending Amount', money: true, tint: '#ea580c' },
+  { key: 'receivable_customers_60', label: 'Receivable Customers (>60 Days)', money: false, tint: '#a855f7' },
+  { key: 'receivables_amount_60', label: 'Receivables Amount (>60 Days)', money: true, tint: '#9333ea' },
 ];
 
 const monthKey = (v: unknown) => {
@@ -148,7 +148,7 @@ export function B2CReportView({ rows, variant = 'records', onEdit }: {
                 fontSize: 'var(--fs-sm)', color: 'var(--ink-600)',
                 display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6,
               }}>
-                <span aria-hidden="true">{f.emoji}</span>{f.label}
+                {f.label}
               </div>
               <div style={{
                 fontSize: f.strong ? 26 : 22,
@@ -181,11 +181,8 @@ export function B2CReportView({ rows, variant = 'records', onEdit }: {
                 </thead>
                 <tbody>
                   {SUMMARY.map(f => (
-                    <tr key={f.key}>
-                      <th scope="row" className="xpose__rowhd">
-                        <span aria-hidden="true" style={{ marginRight: 6 }}>{f.emoji}</span>
-                        {f.label}
-                      </th>
+                   <tr key={f.key}>
+                      <th scope="row" className="xpose__rowhd">{f.label}</th>
                       {shown.map(([k, r]) => (
                         <td key={k} className="is-num" style={{
                           fontWeight: f.strong || k === activeKey ? 650 : undefined,

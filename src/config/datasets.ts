@@ -20,16 +20,6 @@ import type { DatasetDef } from './types';
  *
  * The spreadsheet is the storage destination, never the definition. Nothing
  * here is inferred from what a sheet happens to contain.
- *
- * TWO EXCEPTIONS worth knowing before you edit and wonder why nothing changed:
- *
- *  1. hydrateDatasets() at the bottom of this file REPLACES everything below
- *     at sign-in with the live registry from data_sources / field_mappings.
- *     What is here is the fallback for when that fetch fails.
- *  2. Departments with a bespoke entry form (collections, marketing) render
- *     their own fields from their own component. This file still governs what
- *     the API accepts and where each value lands, but it does not decide what
- *     the form shows.
  * ------------------------------------------------------------------------- */
 
 export const DATASETS: DatasetDef[] = [
@@ -172,19 +162,10 @@ export const DATASETS: DatasetDef[] = [
    * headers and every later row a record. Point sheetName at a helper tab that
    * TRANSPOSE()s the working grid, so the team keeps editing the layout they
    * already use and the app reads a shape it understands.
-   *
-   * `header` is kept IDENTICAL to `sheetColumn` throughout this dataset, at the
-   * team's request. The reason is not tidiness: the B2C report has its own
-   * "Pending Amount" covering unpaid invoices outstanding, a different figure
-   * from "Pending collection amount" here, and the two were being read as the
-   * same number. Sharing one vocabulary with the sheet keeps them visibly
-   * distinct with no mapping layer to drift.
    * ------------------------------------------------------------------ */
   {
     id: 'collections_monthly',
-    label: 'Collection Summary',
-    icon: 'trending',
-    businessLine: 'B2C',
+    label: 'Collection',
     noun: 'month',
     department: 'collections',
     spreadsheetEnv: 'SHEETS_ID_COLLECTIONS',
@@ -194,7 +175,6 @@ export const DATASETS: DatasetDef[] = [
     dateColumn: 'month',
     transposable: true,
     combinedEntry: true,
-    entryForm: 'collections',
     defaultSort: { key: 'month', dir: 'desc' },
     auditable: true,
     columns: [
@@ -206,32 +186,22 @@ export const DATASETS: DatasetDef[] = [
         sheetColumn: 'Collection Amount', aggregate: 'sum', editable: true, min: 0,
         help: 'Total collected against all outstanding, not only this month.' },
 
-      { key: 'collection_month', header: 'Collection amount for the month', type: 'currency',
+      { key: 'collection_month', header: 'Collection (this month)', type: 'currency',
         sheetColumn: 'Collection amount for the month', aggregate: 'sum', editable: true, min: 0,
         help: 'Received against this month only, not the running total.' },
 
-      { key: 'raised_amount', header: 'Raised Invoice amount', type: 'currency',
+      { key: 'raised_amount', header: 'Raised Invoice Amount', type: 'currency',
         sheetColumn: 'Raised Invoice amount', aggregate: 'sum', role: 'amount',
         editable: true, min: 0 },
 
-      /* Entered by the team, not computed. It normally equals Raised minus
-         Collection amount for the month, and the entry form warns when an
-         entered figure differs from that by more than 1% — but it does not
-         block, because an override can be legitimate. */
-      { key: 'pending_amount', header: 'Pending collection amount', type: 'currency',
-        sheetColumn: 'Pending collection amount', aggregate: 'sum',
-        editable: true, min: 0,
-        help: 'Entered by the team. Normally Raised Invoice amount minus Collection amount for the month.' },
+      { key: 'pending_amount', header: 'Pending Collection', type: 'currency',
+        sheetColumn: 'Pending collection amount', aggregate: 'sum', derived: true,
+        help: 'Raised minus collected. Computed, never entered.' },
 
-      /* Gap % divides by Raised Invoice amount, matching the sheet's row 7
-         (=C6/C5*100). Verified against the columns that already hold values:
-         March 6.678613, April 7.426019, May 7.778137 all reproduce to six
-         decimals. Dividing by Collection Amount gives 5.10 / 6.54 / 6.36 for
-         those months, which matches nothing in the sheet. */
-      { key: 'gap_pct', header: 'Gap in %', type: 'percent', sheetColumn: 'Gap in %',
-        derived: true, help: 'Pending collection amount over Raised Invoice amount. Computed.' },
+      { key: 'gap_pct', header: 'Gap %', type: 'percent', sheetColumn: 'Gap in %',
+        derived: true, help: 'Share of raised invoicing not yet collected. Computed.' },
 
-      { key: 'pending_to_date', header: 'Total Pending Invoice amount till date', type: 'currency',
+      { key: 'pending_to_date', header: 'Pending To Date', type: 'currency',
         sheetColumn: 'Total Pending Invoice amount till date', editable: true, min: 0,
         help: 'Cumulative, not this month alone.' },
 
@@ -251,191 +221,92 @@ export const DATASETS: DatasetDef[] = [
        * The cost is that a new line of business is a schema change here plus
        * five new sheet columns, not a row someone types. That is the right
        * trade while the three segments are fixed.
-       *
-       * Share in revenue divides by Collection amount for the month, matching
-       * the sheet's row 18 (=C15/C4*100). Storage is the remainder of that
-       * same figure, so it is also what makes the three shares sum to 100%.
        * ---------------------------------------------------------------- */
       /* --- Pickup --- */
-      { key: 'pk_raised', header: 'Pickup Raised Invoices Amount', type: 'currency',
+      { key: 'pk_raised', header: 'Pickup Raised', type: 'currency',
         sheetColumn: 'Pickup Raised Invoices Amount', aggregate: 'sum', editable: true, min: 0 },
-      { key: 'pk_collected', header: 'Pickup Collection Amount', type: 'currency',
+      { key: 'pk_collected', header: 'Pickup Collected', type: 'currency',
         sheetColumn: 'Pickup Collection Amount', aggregate: 'sum', editable: true, min: 0 },
-      /* Entered by the team, matching pending_amount above. Delivery and
-         storage remain computed — flip them the same way if the team wants
-         all three segments to behave alike in the form. */
       { key: 'pk_gap', header: 'Pickup Gap in Rs.', type: 'currency',
-        sheetColumn: 'Pickup Gap in Rs.', aggregate: 'sum',
-        editable: true, min: 0,
-        help: 'Entered by the team. Normally Pickup Raised minus Pickup Collection.' },
-      { key: 'pk_gap_pct', header: 'Pickup Gap in %', type: 'percent',
+        sheetColumn: 'Pickup Gap in Rs.', aggregate: 'sum', derived: true },
+      { key: 'pk_gap_pct', header: 'Pickup Gap %', type: 'percent',
         sheetColumn: 'Pickup Gap in %', derived: true },
       { key: 'pk_share', header: 'Pickup Share in revenue', type: 'percent',
         sheetColumn: 'Pickup Share in revenue', derived: true },
       /* --- Delivery --- */
-      { key: 'dl_raised', header: 'Delivery Raised Invoices Amount', type: 'currency',
+      { key: 'dl_raised', header: 'Delivery Raised', type: 'currency',
         sheetColumn: 'Delivery Raised Invoices Amount', aggregate: 'sum', editable: true, min: 0 },
-      { key: 'dl_collected', header: 'Delivery Collection Amount', type: 'currency',
+      { key: 'dl_collected', header: 'Delivery Collected', type: 'currency',
         sheetColumn: 'Delivery Collection Amount', aggregate: 'sum', editable: true, min: 0 },
       { key: 'dl_gap', header: 'Delivery Gap in Rs.', type: 'currency',
         sheetColumn: 'Delivery Gap in Rs.', aggregate: 'sum', derived: true },
-      { key: 'dl_gap_pct', header: 'Delivery Gap in %', type: 'percent',
+      { key: 'dl_gap_pct', header: 'Delivery Gap %', type: 'percent',
         sheetColumn: 'Delivery Gap in %', derived: true },
       { key: 'dl_share', header: 'Delivery Share in revenue', type: 'percent',
         sheetColumn: 'Delivery Share in revenue', derived: true },
       /* --- Storage --- */
-      { key: 'st_raised', header: 'Storage Raised Invoices Amount', type: 'currency',
-        sheetColumn: 'Storage Raised Invoices Amount', aggregate: 'sum', derived: true },
-      { key: 'st_collected', header: 'Storage Collection Amount', type: 'currency',
-        sheetColumn: 'Storage Collection Amount', aggregate: 'sum', derived: true },
+      { key: 'st_raised', header: 'Storage Raised', type: 'currency',
+        sheetColumn: 'Storage Raised Invoices Amount', aggregate: 'sum', editable: true, min: 0 },
+      { key: 'st_collected', header: 'Storage Collected', type: 'currency',
+        sheetColumn: 'Storage Collection Amount', aggregate: 'sum', editable: true, min: 0 },
       { key: 'st_gap', header: 'Storage Gap in Rs.', type: 'currency',
         sheetColumn: 'Storage Gap in Rs.', aggregate: 'sum', derived: true },
-      { key: 'st_gap_pct', header: 'Storage Gap in %', type: 'percent',
+      { key: 'st_gap_pct', header: 'Storage Gap %', type: 'percent',
         sheetColumn: 'Storage Gap in %', derived: true },
       { key: 'st_share', header: 'Storage Share in revenue', type: 'percent',
         sheetColumn: 'Storage Share in revenue', derived: true },
     ],
   },
 
-/* =========================================================================
- * INSERT INTO src/config/datasets.ts, directly after the collections_monthly
- * object (after its closing `},`) and before the marketing comment block.
- * ========================================================================= */
-
   /* ------------------------------------------------------------------ *
-   * Collections — B2C monthly report.
+   * Collections — invoice line items.
    *
-   * The two report tables the team circulates: a customer/amount summary and
-   * a per-city invoice/collection split. One row per month holds both, so a
-   * month is a single write and the city figures cannot drift out of step
-   * with the summary above them — the same shape, and the same reason, as
-   * the revenue segments on collections_monthly.
-   *
-   * `header` matches `sheetColumn` and both match the report images exactly,
-   * including "Receivables Amount (>60 Days)" with its plural and its
-   * bracket. The report is circulated as-is to people outside this app, and a
-   * label that reads differently here is a label someone will query.
-   *
-   * TOTALS ARE DERIVED, not entered. Total Raised Amount is the sum of the
-   * city invoice figures and Total Collection Amount the sum of the city
-   * collections — the source images show 2.33Cr and 2.39Cr in both places.
-   * Typing them again is one more chance for the two halves of a report to
-   * contradict each other in front of management.
-   *
-   * Cities are column groups rather than rows because a month must stay one
-   * write. The cost is that a ninth city is a schema change here plus two
-   * sheet columns. That is the right trade while the list is stable; if
-   * cities start moving, this becomes a per-city-row dataset keyed on
-   * month + city instead.
+   * The raw ledger behind the monthly figures: one row per invoice line, as
+   * exported. Records only — the collections dashboard reads the monthly and
+   * segment datasets, and a second set of KPI cards derived from raw lines
+   * would state the same thing twice on a different basis.
    * ------------------------------------------------------------------ */
   {
-    id: 'collections_b2c_report',
-    label: 'Monthly Report',
-    noun: 'month',
+    id: 'collections_invoices',
+    label: 'Invoices',
+    noun: 'invoice line',
     department: 'collections',
-    businessLine: 'B2C',
     spreadsheetEnv: 'SHEETS_ID_COLLECTIONS',
-    // Created on first write if absent. Rename the tab in Sheets and change
-    // this line with it; nothing else in the app knows the name.
-    sheetName: 'b2c_monthly_report',
-    createMissingTab: true,
-    idColumn: 'month',
-    titleColumn: 'month',
-    dateColumn: 'month',
-    combinedEntry: true,
-    entryForm: 'b2c_report',
-    defaultSort: { key: 'month', dir: 'desc' },
+    // Exactly as the tab is named, trailing ".csv" and all. Rename the tab and
+    // this line changes with it; nothing else in the app knows the name.
+    sheetName: 'invoices (1).csv',
+    idColumn: 'sid',
+    titleColumn: 'sid',
+    subtitleColumns: ['particulars'],
+    statusColumn: 'state',
+    dateColumn: 'paid',
+    defaultSort: { key: 'paid', dir: 'desc' },
     auditable: true,
     columns: [
-      { key: 'month', header: 'Month', type: 'date', sheetColumn: 'Month',
-        required: true, filterable: true, sortable: true, unique: true, role: 'date',
-        help: 'First of the month. One row per month.' },
+      { key: 'sid', header: 'SID', type: 'id', sheetColumn: 'sid',
+        required: true, editable: true, unique: true, filterable: true, sortable: true, width: 150,
+        help: 'Storeganise line id. Unique per invoice line.' },
 
-      /* --- customer & amount summary --- */
-      { key: 'customers_raised', header: 'Total Customers Raised', type: 'number',
-        sheetColumn: 'Total Customers Raised',
-        editable: true, min: 0, aggregate: 'sum', role: 'quantity' },
+      { key: 'particulars', header: 'Particulars', type: 'text', sheetColumn: 'Particulars',
+        required: true, editable: true, filterable: true, groupable: true, sortable: true,
+        role: 'category', help: 'Rent, Delivery charges, and so on.' },
 
-      { key: 'raised_amount', header: 'Total Raised Amount', type: 'currency',
-        sheetColumn: 'Total Raised Amount', aggregate: 'sum', role: 'amount',
-        derived: true,
-        help: 'Sum of the city invoice amounts. Computed, never entered.' },
+      { key: 'subtotal', header: 'Subtotal', type: 'currency', sheetColumn: 'subtotal',
+        editable: true, min: 0, aggregate: 'sum', sortable: true },
 
-      { key: 'collected_customers', header: 'Total Collected Customers', type: 'number',
-        sheetColumn: 'Total Collected Customers',
-        editable: true, min: 0, aggregate: 'sum', role: 'quantity',
-        help: 'Can exceed customers raised — collections land against earlier months too.' },
+      { key: 'total', header: 'Total', type: 'currency', sheetColumn: 'total',
+        editable: true, min: 0, aggregate: 'sum', sortable: true, role: 'amount' },
 
-      { key: 'collection_amount', header: 'Total Collection Amount', type: 'currency',
-        sheetColumn: 'Total Collection Amount', aggregate: 'sum',
-        derived: true,
-        help: 'Sum of the city collection amounts. Computed, never entered.' },
+      // Header reads "paid" but the values are dates, so this is when it was
+      // settled, not how much. Typed as a date or every filter on it misreads.
+      { key: 'paid', header: 'Paid Date', type: 'date', sheetColumn: 'paid',
+        editable: true, sortable: true, role: 'date',
+        help: 'Date the line was settled. Leave blank while it is only sent.' },
 
-      { key: 'pending_customers', header: 'Pending Customers', type: 'number',
-        sheetColumn: 'Pending Customers',
-        editable: true, min: 0, aggregate: 'sum', role: 'quantity' },
-
-      /* Deliberately NOT the same figure as "Pending collection amount" on
-         collections_monthly. That one is this month's raised less this
-         month's collected; this is the value of invoices still unpaid across
-         all months. Both are correct and they will not match — which is why
-         each keeps the name its own report uses. */
-      { key: 'pending_amount', header: 'Pending Amount', type: 'currency',
-        sheetColumn: 'Pending Amount', aggregate: 'sum',
-        editable: true, min: 0,
-        help: 'Value of unpaid invoices outstanding. Not the monthly raised-minus-collected gap.' },
-
-      { key: 'receivable_customers_60', header: 'Receivable Customers (>60 Days)', type: 'number',
-        sheetColumn: 'Receivable Customers (>60 Days)',
-        editable: true, min: 0, aggregate: 'sum', role: 'quantity' },
-
-      { key: 'receivables_amount_60', header: 'Receivables Amount (>60 Days)', type: 'currency',
-        sheetColumn: 'Receivables Amount (>60 Days)', aggregate: 'sum',
-        editable: true, min: 0 },
-
-      /* --- per city: invoice + collection --- */
-      { key: 'blr_invoice', header: 'Bangalore Invoice Amount', type: 'currency',
-        sheetColumn: 'Bangalore Invoice Amount', aggregate: 'sum', editable: true, min: 0 },
-      { key: 'blr_collection', header: 'Bangalore Collection Amount', type: 'currency',
-        sheetColumn: 'Bangalore Collection Amount', aggregate: 'sum', editable: true, min: 0 },
-
-      { key: 'hyd_invoice', header: 'Hyderabad Invoice Amount', type: 'currency',
-        sheetColumn: 'Hyderabad Invoice Amount', aggregate: 'sum', editable: true, min: 0 },
-      { key: 'hyd_collection', header: 'Hyderabad Collection Amount', type: 'currency',
-        sheetColumn: 'Hyderabad Collection Amount', aggregate: 'sum', editable: true, min: 0 },
-
-      { key: 'che_invoice', header: 'Chennai Invoice Amount', type: 'currency',
-        sheetColumn: 'Chennai Invoice Amount', aggregate: 'sum', editable: true, min: 0 },
-      { key: 'che_collection', header: 'Chennai Collection Amount', type: 'currency',
-        sheetColumn: 'Chennai Collection Amount', aggregate: 'sum', editable: true, min: 0 },
-
-      { key: 'pun_invoice', header: 'Pune Invoice Amount', type: 'currency',
-        sheetColumn: 'Pune Invoice Amount', aggregate: 'sum', editable: true, min: 0 },
-      { key: 'pun_collection', header: 'Pune Collection Amount', type: 'currency',
-        sheetColumn: 'Pune Collection Amount', aggregate: 'sum', editable: true, min: 0 },
-
-      { key: 'mum_invoice', header: 'Mumbai Invoice Amount', type: 'currency',
-        sheetColumn: 'Mumbai Invoice Amount', aggregate: 'sum', editable: true, min: 0 },
-      { key: 'mum_collection', header: 'Mumbai Collection Amount', type: 'currency',
-        sheetColumn: 'Mumbai Collection Amount', aggregate: 'sum', editable: true, min: 0 },
-
-      { key: 'del_invoice', header: 'Delhi Invoice Amount', type: 'currency',
-        sheetColumn: 'Delhi Invoice Amount', aggregate: 'sum', editable: true, min: 0 },
-      { key: 'del_collection', header: 'Delhi Collection Amount', type: 'currency',
-        sheetColumn: 'Delhi Collection Amount', aggregate: 'sum', editable: true, min: 0 },
-
-      { key: 'kol_invoice', header: 'Kolkata Invoice Amount', type: 'currency',
-        sheetColumn: 'Kolkata Invoice Amount', aggregate: 'sum', editable: true, min: 0 },
-      { key: 'kol_collection', header: 'Kolkata Collection Amount', type: 'currency',
-        sheetColumn: 'Kolkata Collection Amount', aggregate: 'sum', editable: true, min: 0 },
-
-      { key: 'gur_invoice', header: 'Gurugram Invoice Amount', type: 'currency',
-        sheetColumn: 'Gurugram Invoice Amount', aggregate: 'sum', editable: true, min: 0 },
-      { key: 'gur_collection', header: 'Gurugram Collection Amount', type: 'currency',
-        sheetColumn: 'Gurugram Collection Amount', aggregate: 'sum', editable: true, min: 0 },
-
-      { key: 'entered_by', header: 'Entered By', type: 'email', sheetColumn: 'Entered By',
-        derived: true, hiddenByDefault: true },
+      { key: 'state', header: 'State', type: 'enum', sheetColumn: 'state',
+        required: true, editable: true, filterable: true, groupable: true, sortable: true,
+        role: 'status', enumValues: ['sent', 'paid'],
+        tone: { paid: 'pos', sent: 'signal' } },
     ],
   },
 
@@ -545,68 +416,86 @@ export const DATASETS: DatasetDef[] = [
         help: 'Must match a month already present in Lead Performance.' },
 
       /* --- entered: spend --- */
-      /* --- entered: spend, once for the month ---
+      /* --- entered: the three cost metrics, per category ---
        *
-       * Not split by category, because it cannot be measured that way. The ad
-       * accounts report a single account-level cost and the campaigns are not
-       * named per line of business, so any three-way split would be a rule
-       * someone invented rather than a figure anyone observed.
+       * Typed rather than computed, because the ad accounts report one
+       * account-level spend and the campaigns carry no line-of-business label,
+       * so no per-category cost can be measured here. The team already
+       * maintains these figures; the platform records what they hold.
        *
-       * Splitting by lead share was the obvious candidate and is wrong: it
-       * assumes every category costs the same per lead, which forces all three
-       * CPLs to come out identical. The reference sheet shows them at 315 /
-       * 254 / 137 for the same month, so that assumption is already known to
-       * be false. Recording one honest total beats three invented parts. */
+       * Everything below this point is arithmetic over these three and the
+       * lead counts, which is what keeps the row internally consistent. */
+      { key: 'b2c_cpl', header: 'B2C CPL', type: 'currency', sheetColumn: 'B2C CPL',
+        editable: true, min: 0, role: 'cost' },
+      { key: 'b2b_cpl', header: 'B2B CPL', type: 'currency', sheetColumn: 'B2B CPL',
+        editable: true, min: 0, role: 'cost' },
+      { key: 'pm_cpl', header: 'P&M CPL', type: 'currency', sheetColumn: 'P&M CPL',
+        editable: true, min: 0, role: 'cost' },
+
+      { key: 'b2c_cpvl', header: 'B2C CPVL', type: 'currency', sheetColumn: 'B2C CPVL',
+        editable: true, min: 0, role: 'cost' },
+      { key: 'b2b_cpvl', header: 'B2B CPVL', type: 'currency', sheetColumn: 'B2B CPVL',
+        editable: true, min: 0, role: 'cost' },
+      { key: 'pm_cpvl', header: 'P&M CPVL', type: 'currency', sheetColumn: 'P&M CPVL',
+        editable: true, min: 0, role: 'cost' },
+
+      { key: 'b2c_cac', header: 'B2C CAC', type: 'currency', sheetColumn: 'B2C CAC',
+        editable: true, min: 0, role: 'cost' },
+      { key: 'b2b_cac', header: 'B2B CAC', type: 'currency', sheetColumn: 'B2B CAC',
+        editable: true, min: 0, role: 'cost' },
+      { key: 'pm_cac', header: 'P&M CAC', type: 'currency', sheetColumn: 'P&M CAC',
+        editable: true, min: 0, role: 'cost' },
+
+      /* --- derived: spend, back-computed from CPL x leads ---
+       *
+       * Cost per lead times the lead count is what that category spent. This
+       * is the one bridge from the typed metrics to rupees, and it is why
+       * spend is no longer entered: a typed total and three typed CPLs could
+       * disagree, and there would be no way to tell which was wrong.
+       *
+       * Valid leads x CPVL gives the same figure by a second route. The entry
+       * form compares the two and flags a gap, which catches a mistyped
+       * digit in either column. */
+      { key: 'b2c_spend', header: 'B2C Marketing Spend', type: 'currency',
+        sheetColumn: 'B2C Marketing Spend', derived: true, aggregate: 'sum', role: 'cost' },
+      { key: 'b2b_spend', header: 'B2B Marketing Spend', type: 'currency',
+        sheetColumn: 'B2B Marketing Spend', derived: true, aggregate: 'sum', role: 'cost' },
+      { key: 'pm_spend', header: 'P&M Marketing Spend', type: 'currency',
+        sheetColumn: 'P&M Marketing Spend', derived: true, aggregate: 'sum', role: 'cost' },
       { key: 'total_spend', header: 'Total Marketing Spend', type: 'currency',
-        sheetColumn: 'Total Marketing Spend',
-        editable: true, min: 0, aggregate: 'sum', role: 'cost',
-        help: 'All channels, all categories, for the month.' },
+        sheetColumn: 'Total Marketing Spend', derived: true, aggregate: 'sum', role: 'cost' },
 
-      /* --- entered: customers won --- */
-      { key: 'b2c_customers', header: 'B2C Customers', type: 'number', sheetColumn: 'B2C Customers',
-        editable: true, min: 0, aggregate: 'sum', role: 'quantity',
-        help: 'Leads that became paying customers this month.' },
-      { key: 'b2b_customers', header: 'B2B Customers', type: 'number', sheetColumn: 'B2B Customers',
-        editable: true, min: 0, aggregate: 'sum', role: 'quantity' },
-      { key: 'pm_customers', header: 'P&M Customers', type: 'number', sheetColumn: 'P&M Customers',
-        editable: true, min: 0, aggregate: 'sum', role: 'quantity' },
-      { key: 'total_customers', header: 'Total Customers', type: 'number', sheetColumn: 'Total Customers',
-        derived: true, aggregate: 'sum' },
-
-      /* Per-category CPL, CPVL and CAC are deliberately absent. Each needs a
-       * per-category spend to divide, and spend is only known for the month as
-       * a whole. A column that could only ever hold an invented number is
-       * worse than no column: it renders, and nobody reading it knows.
-       *
-       * Lead-to-customer rate survives the change because it divides customers
-       * by leads and never touches spend. */
+      /* --- derived: customers, from spend / CAC --- */
+      { key: 'b2c_customers', header: 'B2C Customers', type: 'number',
+        sheetColumn: 'B2C Customers', derived: true, aggregate: 'sum' },
+      { key: 'b2b_customers', header: 'B2B Customers', type: 'number',
+        sheetColumn: 'B2B Customers', derived: true, aggregate: 'sum' },
+      { key: 'pm_customers', header: 'P&M Customers', type: 'number',
+        sheetColumn: 'P&M Customers', derived: true, aggregate: 'sum' },
+      { key: 'total_customers', header: 'Total Customers', type: 'number',
+        sheetColumn: 'Total Customers', derived: true, aggregate: 'sum',
+        help: 'Implied by spend and CAC, not a counted figure from HubSpot.' },
 
       /* --- derived: lead to customer rate = customers / total leads --- */
-      { key: 'b2c_l2c', header: 'B2C Lead to Customer Rate', type: 'percent', sheetColumn: 'B2C Lead to Customer Rate', derived: true },
-      { key: 'b2b_l2c', header: 'B2B Lead to Customer Rate', type: 'percent', sheetColumn: 'B2B Lead to Customer Rate', derived: true },
-      { key: 'pm_l2c', header: 'P&M Lead to Customer Rate', type: 'percent', sheetColumn: 'P&M Lead to Customer Rate', derived: true },
+      { key: 'b2c_l2c', header: 'B2C Lead to Customer Rate', type: 'percent',
+        sheetColumn: 'B2C Lead to Customer Rate', derived: true },
+      { key: 'b2b_l2c', header: 'B2B Lead to Customer Rate', type: 'percent',
+        sheetColumn: 'B2B Lead to Customer Rate', derived: true },
+      { key: 'pm_l2c', header: 'P&M Lead to Customer Rate', type: 'percent',
+        sheetColumn: 'P&M Lead to Customer Rate', derived: true },
 
-      /* --- derived: blended, across all three categories --- */
-      /* --- derived: the lead counts these figures were divided by ---
-       *
-       * Snapshot at write time, exactly as warehouse readings snapshot a
-       * warehouse's total space. Without it, correcting a lead count months
-       * later leaves every cost metric on this row quietly describing a
-       * denominator that no longer exists — the numbers still render, they
-       * are simply wrong, which is worse than "Data unavailable".
-       *
-       * With it, the row is always internally consistent: CPL, the spend and
-       * the lead count it was divided by all sit together and can be checked
-       * by eye. Re-saving the month through the entry form refreshes them. */
+      /* --- derived: blended across all three categories --- */
+      { key: 'cpl', header: 'Blended CPL', type: 'currency', sheetColumn: 'Blended CPL', derived: true },
+      { key: 'cpvl', header: 'Blended CPVL', type: 'currency', sheetColumn: 'Blended CPVL', derived: true },
+      { key: 'cac', header: 'Blended CAC', type: 'currency', sheetColumn: 'Blended CAC', derived: true },
+      { key: 'l2c_rate', header: 'Lead to Customer Rate', type: 'percent',
+        sheetColumn: 'Lead to Customer Rate', derived: true },
+
+      /* --- derived: the lead counts everything above was divided by --- */
       { key: 'leads_at_entry', header: 'Total Leads (at entry)', type: 'number',
         sheetColumn: 'Total Leads (at entry)', derived: true, hiddenByDefault: true },
       { key: 'valid_at_entry', header: 'Valid Leads (at entry)', type: 'number',
         sheetColumn: 'Valid Leads (at entry)', derived: true, hiddenByDefault: true },
-
-      { key: 'cpl', header: 'Blended CPL', type: 'currency', sheetColumn: 'Blended CPL', derived: true },
-      { key: 'cpvl', header: 'Blended CPVL', type: 'currency', sheetColumn: 'Blended CPVL', derived: true },
-      { key: 'cac', header: 'Blended CAC', type: 'currency', sheetColumn: 'Blended CAC', derived: true },
-      { key: 'l2c_rate', header: 'Lead to Customer Rate', type: 'percent', sheetColumn: 'Lead to Customer Rate', derived: true },
 
       { key: 'entered_by', header: 'Entered By', type: 'email', sheetColumn: 'Entered By',
         derived: true, hiddenByDefault: true },
@@ -656,11 +545,6 @@ export const DATASETS: DatasetDef[] = [
  * getDataset() deliberately stays SYNCHRONOUS. Every page, table, form and chart
  * already reads schema through it, so hydrating a module-level map means the
  * whole UI becomes configuration-driven without a single one of them changing.
- *
- * NOTE: hydrate REPLACES the seed rather than merging into it. An edit above
- * therefore has no visible effect on any environment where the live registry
- * loads — the same class of surprise as the department loader dropping
- * code-only flags. Change the sheet, or make hydrate merge.
  * ------------------------------------------------------------------------- */
 
 let registry: DatasetDef[] = DATASETS;
