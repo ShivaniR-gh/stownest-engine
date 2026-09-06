@@ -133,7 +133,8 @@ export interface DatasetDef {
    * a department id — a department can then own several datasets with
    * different entry shapes, and adding one touches no shared component.
    */
-    entryForm?: 'collections' | 'marketing' | 'b2c_report';
+    entryForm?: 'collections' | 'marketing' | 'b2c_report' | 'sales';
+      
   defaultSort?: { key: string; dir: 'asc' | 'desc' };
   /** Written to an audit tab on every mutation. */
   auditable?: boolean;

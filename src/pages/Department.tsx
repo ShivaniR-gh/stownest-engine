@@ -27,6 +27,8 @@ import { applyFilters, applyPeriod } from '@/lib/analytics/filters';
 import { scopedId } from '@/lib/data/store';
 import { usePermission } from '@/lib/permissions/usePermission';
 import { B2CReportView } from '@/components/data/B2CReportView';
+import { SalesEntryForm } from '@/components/metrics/SalesEntryForm';
+import { SalesCityView } from '@/components/data/SalesCityView';
 
 type View = 'dashboard' | 'records';
 
@@ -39,6 +41,7 @@ type View = 'dashboard' | 'records';
  * the schema, where the rest of this page already reads it.
  */
 const ENTRY_FORMS: Record<string, ComponentType<{
+  datasetId?: string;
   existing?: Row | null;
   onDone: () => void;
   onCancel: () => void;
@@ -46,6 +49,7 @@ const ENTRY_FORMS: Record<string, ComponentType<{
   collections: CollectionsEntryForm,
   b2c_report: B2CReportEntryForm,
   marketing: MarketingEntryForm,
+  sales: SalesEntryForm,
 };
 
 /** One segmented pill group. Three of these sit in the control bar. */
@@ -254,7 +258,7 @@ export default function Department() {
         )}
 
         {(entering || editingRow) && EntryForm && (
-          <EntryForm existing={editingRow}
+          <EntryForm datasetId={activeDataset?.id} existing={editingRow}
             onCancel={() => { setEntering(false); setEditingRow(null); }}
             onDone={() => { setEntering(false); setEditingRow(null); refresh(); }} />
         )}
@@ -316,14 +320,18 @@ export default function Department() {
 
               {monthly && (
                 <DatasetFilters dataset={activeDataset} rows={scoped[recId] ?? []}
+                
                   value={recFilters} onChange={setRecFilters} />
+                  
               )}
-
-              {/* One grid for both collections datasets: the segment figures
-                  only read against the month totals above them, so showing
-                  them as two tables loses the comparison. */}
-                                {activeDataset.entryForm === 'b2c_report' ? (
+                            {/* Sales and the B2C report each render their own table; the
+                  generic panel would show fifty columns scrolling sideways. */}
+              {activeDataset.department === 'sales' ? (
+                <SalesCityView rows={scoped[recId] ?? []}
+                  label={activeDataset.label} onEdit={setEditingRow} />
+              ) : activeDataset.entryForm === 'b2c_report' ? (
                 <B2CReportView rows={scoped[recId] ?? []} onEdit={setEditingRow} />
+              
               ) : activeDataset.transposable ? (
                 <div className="card"><div className="card__bd">
                   <CollectionsMatrix

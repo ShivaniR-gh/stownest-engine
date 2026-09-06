@@ -80,6 +80,21 @@ export function MarketingDashboard({ leads, acq, view, drill }: {
     return i > 0 ? source[i - 1] : null;
   }, [source, current]);
 
+  /**
+   * The acquisition rows for the same months the lead view is showing.
+   *
+   * Matched on month key rather than by index: the two tabs are written
+   * separately, so a month can exist in one and not the other, and lining them
+   * up positionally would eventually pair a lead count with another month's
+   * spend. Absent means absent — the cost cards then read as em dashes.
+   */
+  const acqCurrent = useMemo(
+    () => orderedAcq.find(r => monthKey(r.month) === monthKey(current?.month)) ?? null,
+    [orderedAcq, current]);
+  const acqPrevious = useMemo(
+    () => orderedAcq.find(r => monthKey(r.month) === monthKey(previous?.month)) ?? null,
+    [orderedAcq, previous]);
+
   if (!source.length || !current) {
     return (
       <div className="card">
@@ -104,6 +119,7 @@ export function MarketingDashboard({ leads, acq, view, drill }: {
 
   return view === 'leads'
     ? <LeadView ordered={orderedLeads} current={current} previous={previous}
+        acqCurrent={acqCurrent} acqPrevious={acqPrevious}
         picker={picker} drill={drill} />
     : <CostView ordered={orderedAcq} current={current} previous={previous}
         picker={picker} drill={drill} />;
@@ -113,11 +129,22 @@ export function MarketingDashboard({ leads, acq, view, drill }: {
 /* Lead performance                                                           */
 /* -------------------------------------------------------------------------- */
 
-function LeadView({ ordered, current, previous, picker, drill }: ViewProps) {
+function LeadView({ ordered, current, previous, acqCurrent, acqPrevious, picker, drill }: ViewProps) {
   const totalValid = n(current, 'total_valid');
-  const totalInvalid = n(current, 'total_invalid');
-  const totalLeads = n(current, 'total_leads');
-  const validRate = val(current, 'valid_rate_pct');
+
+  /**
+   * Cost metrics come from the acquisition row, not this one.
+   *
+   * They are on the lead view because the first question anyone asks after
+   * seeing lead volume is what those leads cost, and making them switch tabs
+   * to find out invites reading the two months as if they were the same one.
+   *
+   * Volume and quality are not lost: the stacked chart below is valid against
+   * invalid per month, and the valid lead rate has its own trend.
+   */
+  const cpl = val(acqCurrent, 'cpl');
+  const cpvl = val(acqCurrent, 'cpvl');
+  const cac = val(acqCurrent, 'cac');
 
   /** Valid against invalid, stacked, so the bar height is the month's volume
    *  and the split inside it is quality. Two separate bars would make you do
@@ -145,16 +172,20 @@ function LeadView({ ordered, current, previous, picker, drill }: ViewProps) {
           <Kpi i={1} label="Total Valid Leads" value={formatInt(totalValid)}
             delta={delta(totalValid, n(previous, 'total_valid'))} good="up"
             note="Qualified this month" />
-          <Kpi i={2} label="Total Invalid Leads" value={formatInt(totalInvalid)}
-            delta={delta(totalInvalid, n(previous, 'total_invalid'))} good="down"
-            note="Disqualified this month" />
-          <Kpi i={3} label="Total Leads" value={formatInt(totalLeads)}
-            delta={delta(totalLeads, n(previous, 'total_leads'))} good="up"
-            note="All leads received" />
-          <Kpi i={4} label="Valid Lead Rate"
-            value={validRate === null ? '—' : formatPct(validRate, 1)}
-            delta={delta(validRate ?? 0, n(previous, 'valid_rate_pct'))} good="up"
-            note="Valid as a share of total" />
+          {/* Blended across all three categories. An em dash means no spend
+              was recorded for the month — a zero would read as free. */}
+          <Kpi i={2} label="Cost Per Lead (CPL)"
+            value={cpl === null ? '—' : formatINR(cpl)}
+            delta={delta(cpl ?? 0, n(acqPrevious, 'cpl'))} good="down"
+            note="Blended, spend ÷ total leads" />
+          <Kpi i={3} label="Cost Per Valid Lead (CPVL)"
+            value={cpvl === null ? '—' : formatINR(cpvl)}
+            delta={delta(cpvl ?? 0, n(acqPrevious, 'cpvl'))} good="down"
+            note="Blended, spend ÷ valid leads" />
+          <Kpi i={4} label="Customer Acquisition Cost (CAC)"
+            value={cac === null ? '—' : formatINR(cac)}
+            delta={delta(cac ?? 0, n(acqPrevious, 'cac'))} good="down"
+            note="Blended, spend ÷ customers" />
         </div>
       </section>
 
@@ -416,6 +447,11 @@ interface ViewProps {
   ordered: Row[];
   current: Row | null;
   previous: Row | null;
+  /** The acquisition rows for the same months, when the lead view needs the
+   *  cost metrics. Absent on the cost view, which already reads them from
+   *  `current`. */
+  acqCurrent?: Row | null;
+  acqPrevious?: Row | null;
   picker: React.ReactNode;
   drill: (title: string, datasetId: string, rows: Row[]) => void;
 }

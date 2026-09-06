@@ -20,6 +20,57 @@ export type Deriver = (
   ctx: { principal: Principal; tab: string },
 ) => Promise<Row>;
 
+/**
+ * Sales city figures. Identical for storage, moving and business, so it is
+ * written once and registered three times — three copies would drift the first
+ * time someone fixed a rule in one of them.
+ *
+ * Only four values per city are entered. Conversion and total are arithmetic
+ * over them, so the server computes both and the browser's copies are
+ * overwritten: a stale tab cannot write a total that disagrees with the orders
+ * and add-ons beside it.
+ *
+ * Checked against the August report: 163 orders + 29 add-ons = 192 total, and
+ * 163 / 526 leads = 31%.
+ */
+const SALES_CITY_KEYS = ['blr', 'hyd', 'che', 'mum', 'pun', 'del', 'kol'];
+
+const salesCityDerive: Deriver = async (values, { principal }) => {
+  const out: Row = { ...values };
+  let totLeads = 0, totOrders = 0, totValue = 0, totAddon = 0;
+
+  for (const c of SALES_CITY_KEYS) {
+    const leads = num(values[`${c}_leads`]);
+    const orders = num(values[`${c}_orders`]);
+    const value = num(values[`${c}_value`]);
+    const addon = num(values[`${c}_addon`]);
+
+    if (leads < 0 || orders < 0 || value < 0 || addon < 0) {
+      throw new HttpError(400, `Figures for ${c.toUpperCase()} cannot be negative.`);
+    }
+    if (orders > leads && leads > 0) {
+      throw new HttpError(400,
+        `${c.toUpperCase()}: ${orders} orders cannot exceed ${leads} leads.`);
+    }
+
+    out[`${c}_conv`] = leads > 0 ? ((orders / leads) * 100).toFixed(2) : '0';
+    out[`${c}_total`] = String(orders + addon);
+
+    totLeads += leads; totOrders += orders; totValue += value; totAddon += addon;
+  }
+
+  return {
+    ...out,
+    tot_leads: String(totLeads),
+    tot_orders: String(totOrders),
+    tot_conv: totLeads > 0 ? ((totOrders / totLeads) * 100).toFixed(2) : '0',
+    tot_value: String(totValue),
+    tot_addon: String(totAddon),
+    tot_total: String(totOrders + totAddon),
+    entered_by: principal.email,
+  };
+};
+
 const DERIVERS: Record<string, Deriver> = {
 
   /**
@@ -77,23 +128,16 @@ const DERIVERS: Record<string, Deriver> = {
   },
 
   /**
-   * The employee enters what they are looking at on the statement: what was
-   * raised and what came in. The gap between the two is arithmetic, so the
-   * server does it — a figure a person retypes is a figure that can disagree
-   * with the two numbers above it, and the sheet already has months where it
-   * does.
+   * Every figure the sheet computes, recomputed here — except the two the team
+   * now enters by hand: Pending collection amount and Pickup Gap in Rs. Those
+   * pass through untouched, and the percentages beside them read the entered
+   * value rather than recomputing it, so a deliberate override cannot be
+   * contradicted by the number next to it.
    *
-   * Share in revenue is NOT derived. The historical sheet's share figures do
-   * not reconcile against any denominator in the data, so computing one here
-   * would silently replace the team's definition with a guess.
-   */
-  /**
-   * Every figure the sheet computes, recomputed here. The employee enters the
-   * month totals and the two transportation segments; storage is the remainder
-   * and the gaps and shares are arithmetic.
-   *
-   * The browser sends these too, but a value the browser calculates is a value
-   * the browser can be wrong about, so the server has the last word.
+   * The employee enters the month totals and the two transportation segments;
+   * storage is the remainder. The browser computes the same figures for its
+   * live preview, but a value the browser calculates is a value the browser
+   * can be wrong about, so the server has the last word.
    */
   collections_monthly: async (values) => {
     const raised = num(values.raised_amount);
@@ -112,33 +156,68 @@ const DERIVERS: Record<string, Deriver> = {
     }
 
     const pct = (part: number, whole: number) => (whole > 0 ? ((part / whole) * 100).toFixed(2) : '0');
-    const pending = raised - collected;
 
     /**
-     * Gap % and Share in revenue divide by Collection Amount, matching the
-     * team's sheet (AP5 = AP6/AP3*100).
-     *
-     * Worth knowing when reading these: Collection Amount is collected against
-     * everything outstanding, while Pending is this month alone, so the two
-     * cover different periods. The three segment shares also stop summing to
-     * 100% as a result. Both are consequences of the sheet's definition, not
-     * of the code — the earlier columns of the same sheet divide by Raised
-     * instead, and those do sum. Change the denominator here if the team
-     * settles on the older formula.
+     * A submitted value wins; the computed figure only fills a blank field.
+     * Recomputing over what the team typed would let the percentage beside a
+     * figure quietly contradict the figure itself.
      */
-    const total = num(values.collection_amount);
+    const entered = (key: string, fallback: number) => {
+      const raw = String(values[key] ?? '').trim();
+      return raw === '' ? fallback : num(values[key]);
+    };
+
+    /**
+     * Denominators follow the team's sheet.
+     *
+     *   Gap %            = Pending ÷ Raised × 100        (row 7,  =C6/C5*100)
+     *   Segment gap %    = Gap ÷ Raised × 100            (row 17, =C16/C14*100)
+     *   Share in revenue = Collected ÷ month's collected (row 18, =C15/C4*100)
+     *
+     * Verified against the columns that already hold values: March 6.678613,
+     * April 7.426019, May 7.778137 all reproduce to six decimals. Dividing by
+     * Collection Amount gives 5.10 / 6.54 / 6.36 for those months, which
+     * matches nothing in the sheet — that figure covers collections against
+     * everything outstanding while Pending covers this month alone, so it
+     * mixes two periods. It is also what previously stopped the three shares
+     * summing to 100%.
+     */
+    const pending = entered('pending_amount', raised - collected);
+    const pkGap = entered('pk_gap', pkR - pkC);
 
     return {
       ...values,
-      pending_amount: String(pending),
-      gap_pct: pct(pending, total),
-
-      pk_gap: String(pkR - pkC), pk_gap_pct: pct(pkR - pkC, pkR), pk_share: pct(pkC, total),
-      dl_gap: String(dlR - dlC), dl_gap_pct: pct(dlR - dlC, dlR), dl_share: pct(dlC, total),
+      gap_pct: pct(pending, raised),
+      pk_gap_pct: pct(pkGap, pkR), pk_share: pct(pkC, collected),
+      dl_gap: String(dlR - dlC), dl_gap_pct: pct(dlR - dlC, dlR), dl_share: pct(dlC, collected),
       st_raised: String(stR), st_collected: String(stC),
-      st_gap: String(stR - stC), st_gap_pct: pct(stR - stC, stR), st_share: pct(stC, total),
+      st_gap: String(stR - stC), st_gap_pct: pct(stR - stC, stR), st_share: pct(stC, collected),
     };
   },
+
+  /**
+   * B2C monthly report.
+   *
+   * The two totals are the sums of the city figures — the source report shows
+   * 2.33Cr and 2.39Cr in both places, so typing them again is one more chance
+   * for the two halves of one report to contradict each other.
+   */
+  collections_b2c_report: async (values, { principal }) => {
+    const cities = ['blr', 'hyd', 'che', 'pun', 'mum', 'del', 'kol', 'gur'];
+    const sum = (suffix: string) =>
+      cities.reduce((a, c) => a + num(values[`${c}_${suffix}`]), 0);
+    return {
+      ...values,
+      raised_amount: String(sum('invoice')),
+      collection_amount: String(sum('collection')),
+      entered_by: principal.email,
+    };
+  },
+
+  /** Sales city performance — same rules for all three lines of business. */
+  sales_storage: salesCityDerive,
+  sales_moving: salesCityDerive,
+  sales_business: salesCityDerive,
 
   /**
    * Lead totals. Valid + invalid per category, then the month roll-up.
@@ -165,7 +244,6 @@ const DERIVERS: Record<string, Deriver> = {
     const totalValid = b2b.valid + b2c.valid + pm.valid;
     const totalInvalid = b2b.invalid + b2c.invalid + pm.invalid;
     const totalLeads = totalValid + totalInvalid;
-
     return {
       ...values,
       b2b_total: String(b2b.total),
@@ -182,15 +260,21 @@ const DERIVERS: Record<string, Deriver> = {
   /**
    * Acquisition cost.
    *
-   * Spend is always recorded once for the month, and optionally split across
-   * the three categories. Whether the split is available depends on how the ad
-   * campaigns are named, which can differ month to month — so it is optional
-   * rather than required, and its absence leaves per-category CPL, CPVL and
-   * CAC blank instead of guessed.
+   * Three typed metrics per category expand into spend, customers and
+   * conversion rate:
    *
-   * Lead-to-customer rate never depends on it: customers divided by leads, so
-   * the three lines can always be compared on conversion even in a month where
-   * nobody could say what each one cost.
+   *   spend     = total leads x CPL      (also valid leads x CPVL)
+   *   customers = spend / CAC
+   *   L2C rate  = customers / total leads
+   *
+   * Spend is not entered anywhere. Back-computing it from CPL is what keeps
+   * the row consistent — a typed monthly total and three typed CPLs could
+   * disagree, and nothing would say which was wrong. Here the arithmetic only
+   * runs one way, so the parts always sum to the whole.
+   *
+   * Customers are implied rather than counted. The counted figure lives in
+   * HubSpot as deals reaching Confirmed; this is what the entered CAC says it
+   * should be, which is a different claim and is labelled as one.
    *
    * The lead counts are read at write time and snapshotted, not joined at read
    * time: if someone corrects March's leads in June, March's CPL as recorded
@@ -227,24 +311,7 @@ const DERIVERS: Record<string, Deriver> = {
       }
     }
 
-    /**
-     * Three typed metrics per category expand into spend, customers and
-     * conversion rate:
-     *
-     *   spend     = total leads x CPL      (also valid leads x CPVL)
-     *   customers = spend / CAC
-     *   L2C rate  = customers / total leads
-     *
-     * Spend is not entered anywhere. Back-computing it from CPL is what keeps
-     * the row consistent — a typed monthly total and three typed CPLs could
-     * disagree, and nothing would say which was wrong. Here the arithmetic
-     * only runs one way, so the parts always sum to the whole.
-     *
-     * Customers are implied rather than counted. The counted figure lives in
-     * HubSpot as deals reaching Confirmed; this is what the entered CAC says
-     * it should be, which is a different claim and is labelled as one.
-     */
-    const out: Record<string, string> = { ...values };
+    const out: Row = { ...values };
     let totalSpend = 0;
     let totalCustomers = 0;
 

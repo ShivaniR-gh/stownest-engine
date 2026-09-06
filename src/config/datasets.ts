@@ -22,8 +22,139 @@ import type { DatasetDef } from './types';
  * here is inferred from what a sheet happens to contain.
  * ------------------------------------------------------------------------- */
 
-export const DATASETS: DatasetDef[] = [
+/* =========================================================================
+ 
+ * line `export const DATASETS: DatasetDef[] = [`.
+ *
+ * Then add ONE line as the first entry inside that array:
+ *
+ *     export const DATASETS: DatasetDef[] = [
+ *       ...SALES_DATASETS,
+ *
+ * Nothing else in datasets.ts changes.
+ * ========================================================================= */
 
+/* ------------------------------------------------------------------ *
+ * Sales — city performance, one dataset per line of business.
+ *
+ * The three lines record exactly the same things, so the columns are built
+ * once and reused. Writing them out three times would guarantee they drift:
+ * someone adds a field to storage, forgets moving, and the two dashboards
+ * quietly stop being comparable.
+ *
+ * Cities are column groups rather than rows because a month must stay one
+ * write — a half-saved month with four cities and no total is worse than a
+ * refused one. The cost is that an eighth city is a schema change here plus
+ * four sheet columns per line.
+ *
+ * Four figures are ENTERED per city: leads, orders, value, add-ons.
+ * Conversion and total are ARITHMETIC over them and are never typed —
+ * checked against the August report, every row reconciles:
+ *   Total      = Orders + Add on      163 + 29 = 192
+ *   Conversion = Orders / Leads       163 / 526 = 31%
+ * A person retyping either is a person who can make the total disagree with
+ * the two numbers beside it.
+ * ------------------------------------------------------------------ */
+
+const SALES_CITIES = [
+  { key: 'blr', name: 'Bangalore' },
+  { key: 'hyd', name: 'Hyderabad' },
+  { key: 'che', name: 'Chennai' },
+  { key: 'mum', name: 'Mumbai' },
+  { key: 'pun', name: 'Pune' },
+  { key: 'del', name: 'Delhi' },
+  { key: 'kol', name: 'Kolkata' },
+] as const;
+
+/** The per-city column set, plus the month roll-up. Identical for all three
+ *  lines of business. */
+function salesColumns(): DatasetDef['columns'] {
+  const perCity = SALES_CITIES.flatMap(c => ([
+    { key: `${c.key}_leads`, header: `${c.name} Leads`, type: 'number' as const,
+      sheetColumn: `${c.name} Leads`,
+      editable: true, min: 0, aggregate: 'sum' as const, role: 'quantity' as const },
+
+    { key: `${c.key}_orders`, header: `${c.name} Orders`, type: 'number' as const,
+      sheetColumn: `${c.name} Orders`,
+      editable: true, min: 0, aggregate: 'sum' as const, role: 'quantity' as const },
+
+    { key: `${c.key}_conv`, header: `${c.name} Conversion`, type: 'percent' as const,
+      sheetColumn: `${c.name} Conversion`, derived: true,
+      help: 'Orders as a share of leads. Computed, never entered.' },
+
+    { key: `${c.key}_value`, header: `${c.name} Value`, type: 'currency' as const,
+      sheetColumn: `${c.name} Value`,
+      editable: true, min: 0, aggregate: 'sum' as const, role: 'amount' as const },
+
+    { key: `${c.key}_addon`, header: `${c.name} Add on`, type: 'number' as const,
+      sheetColumn: `${c.name} Add on`,
+      editable: true, min: 0, aggregate: 'sum' as const, role: 'quantity' as const,
+      help: 'Count of add-on orders, not an amount. Adds into the total.' },
+
+    { key: `${c.key}_total`, header: `${c.name} Total`, type: 'number' as const,
+      sheetColumn: `${c.name} Total`, derived: true, aggregate: 'sum' as const,
+      help: 'Orders plus add-ons. Computed, never entered.' },
+  ]));
+
+  return [
+    { key: 'month', header: 'Month', type: 'date', sheetColumn: 'Month',
+      required: true, filterable: true, sortable: true, unique: true, role: 'date',
+      help: 'First of the month. One row per month.' },
+
+    ...perCity,
+
+    /* --- month roll-up, all derived --- */
+    { key: 'tot_leads', header: 'Total Leads', type: 'number', sheetColumn: 'Total Leads',
+      derived: true, aggregate: 'sum' },
+    { key: 'tot_orders', header: 'Total Orders', type: 'number', sheetColumn: 'Total Orders',
+      derived: true, aggregate: 'sum' },
+    { key: 'tot_conv', header: 'Total Conversion', type: 'percent', sheetColumn: 'Total Conversion',
+      derived: true },
+    { key: 'tot_value', header: 'Total Value', type: 'currency', sheetColumn: 'Total Value',
+      derived: true, aggregate: 'sum' },
+    { key: 'tot_addon', header: 'Total Add on', type: 'number', sheetColumn: 'Total Add on',
+      derived: true, aggregate: 'sum' },
+    { key: 'tot_total', header: 'Total', type: 'number', sheetColumn: 'Total',
+      derived: true, aggregate: 'sum' },
+
+    { key: 'entered_by', header: 'Entered By', type: 'email', sheetColumn: 'Entered By',
+      derived: true, hiddenByDefault: true },
+  ];
+}
+
+function salesDataset(
+  id: string, label: string, line: string, icon: string, sheetName: string,
+): DatasetDef {
+  return {
+    id, label, icon,
+    noun: 'month',
+    department: 'sales',
+    businessLine: line,
+    spreadsheetEnv: 'SHEETS_ID_SALES',
+    // Created on first write if absent. Rename the tab in Sheets and change
+    // this line with it; nothing else in the app knows the name.
+    sheetName,
+    createMissingTab: true,
+    idColumn: 'month',
+    titleColumn: 'month',
+    dateColumn: 'month',
+    combinedEntry: true,
+    entryForm: 'sales',
+    defaultSort: { key: 'month', dir: 'desc' },
+    auditable: true,
+    columns: salesColumns(),
+  };
+}
+
+export const SALES_DATASETS: DatasetDef[] = [
+  salesDataset('sales_storage', 'Storage', 'Storage', 'box', 'storage_monthly'),
+  salesDataset('sales_moving', 'Moving', 'Moving', 'truck', 'moving_monthly'),
+  salesDataset('sales_business', 'Business', 'Business', 'trending', 'business_monthly'),
+];
+
+
+export const DATASETS: DatasetDef[] = [
+  ...SALES_DATASETS,
   /* ------------------------------------------------------------------ *
    * Warehouses — the master list.
    *
@@ -165,7 +296,9 @@ export const DATASETS: DatasetDef[] = [
    * ------------------------------------------------------------------ */
   {
     id: 'collections_monthly',
-    label: 'Collection',
+    label: 'Collection Summary',
+    icon: 'trending',
+    businessLine: 'B2C',
     noun: 'month',
     department: 'collections',
     spreadsheetEnv: 'SHEETS_ID_COLLECTIONS',
@@ -258,55 +391,141 @@ export const DATASETS: DatasetDef[] = [
     ],
   },
 
+
   /* ------------------------------------------------------------------ *
-   * Collections — invoice line items.
+   * Collections — B2C monthly report.
    *
-   * The raw ledger behind the monthly figures: one row per invoice line, as
-   * exported. Records only — the collections dashboard reads the monthly and
-   * segment datasets, and a second set of KPI cards derived from raw lines
-   * would state the same thing twice on a different basis.
+   * The two report tables the team circulates: a customer/amount summary and
+   * a per-city invoice/collection split. One row per month holds both, so a
+   * month is a single write and the city figures cannot drift out of step
+   * with the summary above them — the same shape, and the same reason, as
+   * the revenue segments on collections_monthly.
+   *
+   * `header` matches `sheetColumn` and both match the report images exactly,
+   * including "Receivables Amount (>60 Days)" with its plural and its
+   * bracket. The report is circulated as-is to people outside this app, and a
+   * label that reads differently here is a label someone will query.
+   *
+   * TOTALS ARE DERIVED, not entered. Total Raised Amount is the sum of the
+   * city invoice figures and Total Collection Amount the sum of the city
+   * collections — the source images show 2.33Cr and 2.39Cr in both places.
+   * Typing them again is one more chance for the two halves of a report to
+   * contradict each other in front of management.
+   *
+   * Cities are column groups rather than rows because a month must stay one
+   * write. The cost is that a ninth city is a schema change here plus two
+   * sheet columns. That is the right trade while the list is stable; if
+   * cities start moving, this becomes a per-city-row dataset keyed on
+   * month + city instead.
    * ------------------------------------------------------------------ */
   {
-    id: 'collections_invoices',
-    label: 'Invoices',
-    noun: 'invoice line',
+    id: 'collections_b2c_report',
+    label: 'Report',
+    noun: 'month',
     department: 'collections',
+    businessLine: 'B2C',
     spreadsheetEnv: 'SHEETS_ID_COLLECTIONS',
-    // Exactly as the tab is named, trailing ".csv" and all. Rename the tab and
-    // this line changes with it; nothing else in the app knows the name.
-    sheetName: 'invoices (1).csv',
-    idColumn: 'sid',
-    titleColumn: 'sid',
-    subtitleColumns: ['particulars'],
-    statusColumn: 'state',
-    dateColumn: 'paid',
-    defaultSort: { key: 'paid', dir: 'desc' },
+    // Created on first write if absent. Rename the tab in Sheets and change
+    // this line with it; nothing else in the app knows the name.
+    sheetName: 'b2c_monthly_report',
+    createMissingTab: true,
+    idColumn: 'month',
+    titleColumn: 'month',
+    dateColumn: 'month',
+    combinedEntry: true,
+    entryForm: 'b2c_report',
+    defaultSort: { key: 'month', dir: 'desc' },
     auditable: true,
     columns: [
-      { key: 'sid', header: 'SID', type: 'id', sheetColumn: 'sid',
-        required: true, editable: true, unique: true, filterable: true, sortable: true, width: 150,
-        help: 'Storeganise line id. Unique per invoice line.' },
+      { key: 'month', header: 'Month', type: 'date', sheetColumn: 'Month',
+        required: true, filterable: true, sortable: true, unique: true, role: 'date',
+        help: 'First of the month. One row per month.' },
 
-      { key: 'particulars', header: 'Particulars', type: 'text', sheetColumn: 'Particulars',
-        required: true, editable: true, filterable: true, groupable: true, sortable: true,
-        role: 'category', help: 'Rent, Delivery charges, and so on.' },
+      /* --- customer & amount summary --- */
+      { key: 'customers_raised', header: 'Total Customers Raised', type: 'number',
+        sheetColumn: 'Total Customers Raised',
+        editable: true, min: 0, aggregate: 'sum', role: 'quantity' },
 
-      { key: 'subtotal', header: 'Subtotal', type: 'currency', sheetColumn: 'subtotal',
-        editable: true, min: 0, aggregate: 'sum', sortable: true },
+      { key: 'raised_amount', header: 'Total Raised Amount', type: 'currency',
+        sheetColumn: 'Total Raised Amount', aggregate: 'sum', role: 'amount',
+        derived: true,
+        help: 'Sum of the city invoice amounts. Computed, never entered.' },
 
-      { key: 'total', header: 'Total', type: 'currency', sheetColumn: 'total',
-        editable: true, min: 0, aggregate: 'sum', sortable: true, role: 'amount' },
+      { key: 'collected_customers', header: 'Total Collected Customers', type: 'number',
+        sheetColumn: 'Total Collected Customers',
+        editable: true, min: 0, aggregate: 'sum', role: 'quantity',
+        help: 'Can exceed customers raised — collections land against earlier months too.' },
 
-      // Header reads "paid" but the values are dates, so this is when it was
-      // settled, not how much. Typed as a date or every filter on it misreads.
-      { key: 'paid', header: 'Paid Date', type: 'date', sheetColumn: 'paid',
-        editable: true, sortable: true, role: 'date',
-        help: 'Date the line was settled. Leave blank while it is only sent.' },
+      { key: 'collection_amount', header: 'Total Collection Amount', type: 'currency',
+        sheetColumn: 'Total Collection Amount', aggregate: 'sum',
+        derived: true,
+        help: 'Sum of the city collection amounts. Computed, never entered.' },
 
-      { key: 'state', header: 'State', type: 'enum', sheetColumn: 'state',
-        required: true, editable: true, filterable: true, groupable: true, sortable: true,
-        role: 'status', enumValues: ['sent', 'paid'],
-        tone: { paid: 'pos', sent: 'signal' } },
+      { key: 'pending_customers', header: 'Pending Customers', type: 'number',
+        sheetColumn: 'Pending Customers',
+        editable: true, min: 0, aggregate: 'sum', role: 'quantity' },
+
+      /* Deliberately NOT the same figure as "Pending collection amount" on
+         collections_monthly. That one is this month's raised less this
+         month's collected; this is the value of invoices still unpaid across
+         all months. Both are correct and they will not match — which is why
+         each keeps the name its own report uses. */
+      { key: 'pending_amount', header: 'Pending Amount', type: 'currency',
+        sheetColumn: 'Pending Amount', aggregate: 'sum',
+        editable: true, min: 0,
+        help: 'Value of unpaid invoices outstanding. Not the monthly raised-minus-collected gap.' },
+
+      { key: 'receivable_customers_60', header: 'Receivable Customers (>60 Days)', type: 'number',
+        sheetColumn: 'Receivable Customers (>60 Days)',
+        editable: true, min: 0, aggregate: 'sum', role: 'quantity' },
+
+      { key: 'receivables_amount_60', header: 'Receivables Amount (>60 Days)', type: 'currency',
+        sheetColumn: 'Receivables Amount (>60 Days)', aggregate: 'sum',
+        editable: true, min: 0 },
+
+      /* --- per city: invoice + collection --- */
+      { key: 'blr_invoice', header: 'Bangalore Invoice Amount', type: 'currency',
+        sheetColumn: 'Bangalore Invoice Amount', aggregate: 'sum', editable: true, min: 0 },
+      { key: 'blr_collection', header: 'Bangalore Collection Amount', type: 'currency',
+        sheetColumn: 'Bangalore Collection Amount', aggregate: 'sum', editable: true, min: 0 },
+
+      { key: 'hyd_invoice', header: 'Hyderabad Invoice Amount', type: 'currency',
+        sheetColumn: 'Hyderabad Invoice Amount', aggregate: 'sum', editable: true, min: 0 },
+      { key: 'hyd_collection', header: 'Hyderabad Collection Amount', type: 'currency',
+        sheetColumn: 'Hyderabad Collection Amount', aggregate: 'sum', editable: true, min: 0 },
+
+      { key: 'che_invoice', header: 'Chennai Invoice Amount', type: 'currency',
+        sheetColumn: 'Chennai Invoice Amount', aggregate: 'sum', editable: true, min: 0 },
+      { key: 'che_collection', header: 'Chennai Collection Amount', type: 'currency',
+        sheetColumn: 'Chennai Collection Amount', aggregate: 'sum', editable: true, min: 0 },
+
+      { key: 'pun_invoice', header: 'Pune Invoice Amount', type: 'currency',
+        sheetColumn: 'Pune Invoice Amount', aggregate: 'sum', editable: true, min: 0 },
+      { key: 'pun_collection', header: 'Pune Collection Amount', type: 'currency',
+        sheetColumn: 'Pune Collection Amount', aggregate: 'sum', editable: true, min: 0 },
+
+      { key: 'mum_invoice', header: 'Mumbai Invoice Amount', type: 'currency',
+        sheetColumn: 'Mumbai Invoice Amount', aggregate: 'sum', editable: true, min: 0 },
+      { key: 'mum_collection', header: 'Mumbai Collection Amount', type: 'currency',
+        sheetColumn: 'Mumbai Collection Amount', aggregate: 'sum', editable: true, min: 0 },
+
+      { key: 'del_invoice', header: 'Delhi Invoice Amount', type: 'currency',
+        sheetColumn: 'Delhi Invoice Amount', aggregate: 'sum', editable: true, min: 0 },
+      { key: 'del_collection', header: 'Delhi Collection Amount', type: 'currency',
+        sheetColumn: 'Delhi Collection Amount', aggregate: 'sum', editable: true, min: 0 },
+
+      { key: 'kol_invoice', header: 'Kolkata Invoice Amount', type: 'currency',
+        sheetColumn: 'Kolkata Invoice Amount', aggregate: 'sum', editable: true, min: 0 },
+      { key: 'kol_collection', header: 'Kolkata Collection Amount', type: 'currency',
+        sheetColumn: 'Kolkata Collection Amount', aggregate: 'sum', editable: true, min: 0 },
+
+      { key: 'gur_invoice', header: 'Gurugram Invoice Amount', type: 'currency',
+        sheetColumn: 'Gurugram Invoice Amount', aggregate: 'sum', editable: true, min: 0 },
+      { key: 'gur_collection', header: 'Gurugram Collection Amount', type: 'currency',
+        sheetColumn: 'Gurugram Collection Amount', aggregate: 'sum', editable: true, min: 0 },
+
+      { key: 'entered_by', header: 'Entered By', type: 'email', sheetColumn: 'Entered By',
+        derived: true, hiddenByDefault: true },
     ],
   },
 
@@ -576,3 +795,4 @@ export const visibleColumns = (d: DatasetDef) => d.columns.filter(c => c.sheetCo
 
 /** @deprecated reads the seed only; use getDataset() or allDatasets(). */
 export const DATASET_BY_ID = byId;
+

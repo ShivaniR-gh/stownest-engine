@@ -18,6 +18,8 @@ export interface DepartmentDef {
   businessLines?: { id: string; icon?: string }[];
   /** Appears in the sidebar WORKSPACE group. */
   inWorkspace: boolean;
+
+  
 }
 
 const SEED: DepartmentDef[] = [
@@ -28,6 +30,12 @@ const SEED: DepartmentDef[] = [
     icon: 'trending',
     metrics: [],
     inWorkspace: true,
+    customDashboard: true,
+    businessLines: [
+      { id: 'Storage', icon: 'box' },
+      { id: 'Moving', icon: 'truck' },
+      { id: 'Business', icon: 'trending' },
+    ],
   },
   {
     id: 'logistics',
@@ -99,6 +107,7 @@ const SEED: DepartmentDef[] = [
     metrics: [],
     inWorkspace: false,
   },
+  
 ];
 
 /** ---------------------------------------------------------------------------

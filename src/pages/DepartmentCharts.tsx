@@ -14,6 +14,7 @@ import { crosstab, groupBy, timeSeries } from '@/lib/analytics/aggregate';
 import { formatINRCompact, formatInt, formatPct, toNum } from '@/lib/format';
 import type { Period } from '@/lib/analytics/period';
 import { B2CReportView } from '@/components/data/B2CReportView';
+import { SalesCityView } from '@/components/data/SalesCityView';
 
 interface Ctx {
   rows: Record<string, Row[]>;
@@ -50,74 +51,13 @@ export function DepartmentCharts({ department, ctx }: { department: DepartmentId
 }
 
 /* --------------------------------- Sales --------------------------------- */
-function SalesCharts({ rows, period, drill }: Ctx) {
-  const leads = rows.leads ?? [];
-  const trend = useMemo(() => timeSeries(leads, 'created_at', period, [
-    { id: 'leads', agg: 'count' },
-    { id: 'won', agg: 'count', filter: r => String(r.status) === 'Won' },
-  ]), [leads, period]);
 
-  const stages = useMemo(() => {
-    const c = (...s: string[]) => leads.filter(r => s.includes(String(r.status)));
-    return [
-      { key: 'a', label: 'Leads', value: leads.length, rows: leads },
-      { key: 'q', label: 'Qualified', value: c('Qualified', 'Opportunity', 'Won').length, rows: c('Qualified', 'Opportunity', 'Won') },
-      { key: 'o', label: 'Opportunity', value: c('Opportunity', 'Won').length, rows: c('Opportunity', 'Won') },
-      { key: 'w', label: 'Won', value: c('Won').length, rows: c('Won') },
-    ];
-  }, [leads]);
-
-  const bySource = useMemo(() => groupBy(leads, 'source'), [leads]);
-  const ownerWon = useMemo(
-    () => groupBy(leads.filter(r => String(r.status) === 'Won'), 'owner', { agg: 'sum', measure: 'won_value' }),
-    [leads]);
-  const heat = useMemo(() => crosstab(leads, 'city', 'status'), [leads]);
-
-  return (
-    <>
-      <div className="grid grid--split">
-        <ChartFrame title="Lead flow and conversions" question="Is demand growing, and is more of it closing?"
-          department="sales" isEmpty={!leads.length}>
-          {h => <TrendChart height={h} data={trend} valueFormat={formatInt}
-            series={[
-              { id: 'leads', label: 'Leads', kind: 'area', colorIndex: 0 },
-              { id: 'won', label: 'Won', kind: 'line', colorIndex: 1 },
-            ]}
-            onPointClick={p => drill(`Leads — ${p.label}`, 'leads', p.rows)} />}
-        </ChartFrame>
-
-        <ChartFrame title="Conversion funnel" question="At which stage is the pipeline leaking?"
-          department="sales" isEmpty={!leads.length}>
-          {() => <Pipeline stages={stages} onStageClick={s => drill(`Leads — ${s.label}`, 'leads', s.rows)} />}
-        </ChartFrame>
-      </div>
-
-      <div className="grid grid--2" style={{ marginTop: 'var(--s4)' }}>
-        <ChartFrame title="Leads by source" question="Which channels bring volume?"
-          department="sales" isEmpty={!bySource.length}>
-          {h => <CategoryChart height={h} data={bySource} valueFormat={formatInt}
-            onBarClick={d => drill(`Leads — ${d.key}`, 'leads', d.rows)} />}
-        </ChartFrame>
-
-        <ChartFrame title="Won value by owner" question="Who is actually closing business?"
-          department="sales" isEmpty={!ownerWon.length}>
-          {() => <RankedList items={ownerWon} valueFormat={formatINRCompact} metaLabel="deals won"
-            onClick={i => drill(`Won by ${i.key}`, 'leads', i.rows)} />}
-        </ChartFrame>
-      </div>
-
-      <div style={{ marginTop: 'var(--s4)' }}>
-        <ChartFrame title="City against lead status" question="Which markets stall and which convert?"
-          department="sales" isEmpty={!leads.length} height={260}>
-          {() => <Heatmap rowKeys={heat.rowKeys} colKeys={heat.colKeys} cells={heat.cells}
-            rowLabel="City" valueFormat={formatInt}
-            onCellClick={c => drill(`${c.rowKey} · ${c.colKey}`, 'leads', c.rows)} />}
-        </ChartFrame>
-      </div>
-    </>
-  );
+function SalesCharts({ rows, activeDatasetId }: Ctx) {
+  const line = activeDatasetId.replace('sales_', '');
+  return <SalesCityView rows={rows[activeDatasetId] ?? []}
+    label={line.charAt(0).toUpperCase() + line.slice(1)} variant="dashboard" />;
 }
-
+  
 /* ------------------------------- Logistics -------------------------------- */
 function LogisticsCharts({ rows, period, drill }: Ctx) {
   const jobs = rows.jobs ?? [];
