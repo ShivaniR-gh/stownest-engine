@@ -74,8 +74,8 @@ const salesCityDerive: Deriver = async (values, { principal }) => {
 const DERIVERS: Record<string, Deriver> = {
 
   /**
-   * A space reading stores only wh_code and occupied_space from the user.
-   * Everything else is derived:
+   * A space reading stores wh_code, occupied_space and the three customer
+   * counts from the user. Everything else is derived:
    *
    *  - wh_name / city / location / total_space are SNAPSHOT from the warehouse
    *    master at write time. Snapshotting rather than joining is deliberate:
@@ -85,6 +85,14 @@ const DERIVERS: Record<string, Deriver> = {
    *
    *  - available_space and utilisation_pct are computed, never entered. The
    *    source sheet has rows where these disagree with the figures above them.
+   *
+   *  - opening_customers and churn_pct are computed from the three counts.
+   *    Churn divides by the OPENING balance, not the closing total: whoever
+   *    joined this month was never at risk of leaving it, so including them in
+   *    the denominator understates the rate. Deriving the opening from the
+   *    three entered figures keeps a month self-contained — it can be
+   *    corrected without reading its neighbour — and doubles as a check, since
+   *    it should equal last month's closing total.
    */
   warehouse_readings: async (values, { principal }) => {
     const code = String(values.wh_code ?? '').trim();
@@ -113,6 +121,17 @@ const DERIVERS: Record<string, Deriver> = {
         `Occupied space (${occupied.toLocaleString('en-IN')}) cannot exceed this warehouse's total space of ${total.toLocaleString('en-IN')} sqft.`);
     }
 
+    const totalCust = num(values.total_customers);
+    const newCust = num(values.new_customers);
+    const churned = num(values.churned_customers);
+    const opening = totalCust - newCust + churned;
+
+    if (opening < 0) {
+      throw new HttpError(400,
+        `${newCust} new and ${churned} left against a closing total of ${totalCust} ` +
+        `implies a negative opening balance. One of the three is wrong.`);
+    }
+
     return {
       ...values,
       wh_name:        String(wh.wh_name ?? ''),
@@ -123,6 +142,11 @@ const DERIVERS: Record<string, Deriver> = {
       available_space: String(total - occupied),
       utilisation_pct: total > 0 ? (occupied / total * 100).toFixed(1) : '0',
       recorded_on:    String(values.recorded_on ?? new Date().toISOString().slice(0, 10)),
+      total_customers: String(totalCust),
+      new_customers: String(newCust),
+      churned_customers: String(churned),
+      opening_customers: String(opening),
+      churn_pct: opening > 0 ? ((churned / opening) * 100).toFixed(1) : '0',
       entered_by:     principal.email,
     };
   },
@@ -244,6 +268,7 @@ const DERIVERS: Record<string, Deriver> = {
     const totalValid = b2b.valid + b2c.valid + pm.valid;
     const totalInvalid = b2b.invalid + b2c.invalid + pm.invalid;
     const totalLeads = totalValid + totalInvalid;
+
     return {
       ...values,
       b2b_total: String(b2b.total),
@@ -260,30 +285,32 @@ const DERIVERS: Record<string, Deriver> = {
   /**
    * Acquisition cost.
    *
-   * Three typed metrics per category expand into spend, customers and
-   * conversion rate:
+   * Spend and customers are entered per category; every ratio below is
+   * arithmetic over them and the month's lead counts:
    *
-   *   spend     = total leads x CPL      (also valid leads x CPVL)
-   *   customers = spend / CAC
-   *   L2C rate  = customers / total leads
+   *   CPL      = spend / total leads
+   *   CPVL     = spend / valid leads
+   *   CAC      = spend / customers
+   *   L2C rate = customers / total leads
    *
-   * Spend is not entered anywhere. Back-computing it from CPL is what keeps
-   * the row consistent — a typed monthly total and three typed CPLs could
-   * disagree, and nothing would say which was wrong. Here the arithmetic only
-   * runs one way, so the parts always sum to the whole.
+   * Deriving rather than typing them is what keeps the row honest. A typed
+   * CPL beside a typed spend can disagree, and nothing in the sheet would say
+   * which was wrong; here the arithmetic only runs one way.
    *
-   * Customers are implied rather than counted. The counted figure lives in
-   * HubSpot as deals reaching Confirmed; this is what the entered CAC says it
-   * should be, which is a different claim and is labelled as one.
+   * This is the reverse of the earlier arrangement, which had the team typing
+   * the three ratios because the ad accounts reported only one account-level
+   * spend. They now report it per line of business, so the rupees are observed
+   * and the ratios follow — which is the right way round.
    *
-   * The lead counts are read at write time and snapshotted, not joined at read
-   * time: if someone corrects March's leads in June, March's CPL as recorded
-   * stays what CPL was understood to be when the month was closed. Same
-   * reasoning as the warehouse readings snapshot.
+   * The blended figures are total spend over total leads, NOT an average of
+   * the three CPLs. Averaging would weight a category bringing 226 leads the
+   * same as one bringing 2,551, which is how a small expensive line makes the
+   * whole month look expensive.
    *
-   * The lead row must already exist. Refusing rather than writing zeros is
-   * deliberate: a CPL of Rs 0 renders as a real figure and nobody reading the
-   * dashboard would know it was a placeholder.
+   * The lead counts are read at write time and snapshotted. If someone
+   * corrects March's leads in June, March's CPL as recorded stays what CPL was
+   * understood to be when the month was closed — otherwise the figure would
+   * still render while quietly describing a denominator that no longer exists.
    */
   marketing_acquisition: async (values, { principal }) => {
     const month = monthKey(values.month);
@@ -296,41 +323,39 @@ const DERIVERS: Record<string, Deriver> = {
     if (!lead) {
       throw new HttpError(400,
         `No lead performance row exists for ${month}. Enter the lead counts for that month first — ` +
-        `spend and customers are computed against them.`);
+        `cost per lead cannot be computed without them.`);
     }
 
-    /** Blank rather than a misleading zero when the denominator is absent. */
+    /** Blank rather than a misleading zero when the denominator is absent.
+     *  A CPL of "0" reads as free; a blank reads as unknown, which is true. */
     const per = (a: number, b: number) => (b > 0 ? (a / b).toFixed(0) : '');
     const pct = (part: number, whole: number) => (whole > 0 ? ((part / whole) * 100).toFixed(1) : '');
-
-    for (const k of ['cpl', 'cpvl', 'cac'] as const) {
-      for (const p of ['b2c', 'b2b', 'pm'] as const) {
-        if (num(values[`${p}_${k}`]) < 0) {
-          throw new HttpError(400, `${p.toUpperCase()} ${k.toUpperCase()} cannot be negative.`);
-        }
-      }
-    }
 
     const out: Row = { ...values };
     let totalSpend = 0;
     let totalCustomers = 0;
 
     for (const p of ['b2c', 'b2b', 'pm'] as const) {
+      const spend = num(values[`${p}_spend`]);
+      const customers = num(values[`${p}_customers`]);
       const catLeads = num(lead[`${p}_total`]);
-      const cpl = num(values[`${p}_cpl`]);
-      const cac = num(values[`${p}_cac`]);
+      const catValid = num(lead[`${p}_valid`]);
 
-      const spend = catLeads > 0 && cpl > 0 ? catLeads * cpl : 0;
-      const customers = spend > 0 && cac > 0 ? Math.round(spend / cac) : 0;
-
+      if (spend < 0) {
+        throw new HttpError(400, `${p.toUpperCase()} spend cannot be negative.`);
+      }
+      if (customers < 0) {
+        throw new HttpError(400, `${p.toUpperCase()} customers cannot be negative.`);
+      }
       if (customers > catLeads && catLeads > 0) {
         throw new HttpError(400,
-          `${p.toUpperCase()} CAC of ${cac} against a CPL of ${cpl} implies ${customers} customers ` +
-          `from ${catLeads} leads for ${month}, which is more customers than leads.`);
+          `${p.toUpperCase()} has ${customers} customers against ${catLeads} leads for ${month}. ` +
+          `A customer has to have been a lead first.`);
       }
 
-      out[`${p}_spend`] = spend > 0 ? String(Math.round(spend)) : '';
-      out[`${p}_customers`] = customers > 0 ? String(customers) : '';
+      out[`${p}_cpl`] = per(spend, catLeads);
+      out[`${p}_cpvl`] = per(spend, catValid);
+      out[`${p}_cac`] = per(spend, customers);
       out[`${p}_l2c`] = pct(customers, catLeads);
 
       totalSpend += spend;
@@ -340,8 +365,8 @@ const DERIVERS: Record<string, Deriver> = {
     const allLeads = num(lead.total_leads);
     const allValid = num(lead.total_valid);
 
-    out.total_spend = totalSpend > 0 ? String(Math.round(totalSpend)) : '';
-    out.total_customers = totalCustomers > 0 ? String(totalCustomers) : '';
+    out.total_spend = String(Math.round(totalSpend));
+    out.total_customers = String(totalCustomers);
 
     out.leads_at_entry = String(allLeads);
     out.valid_at_entry = String(allValid);

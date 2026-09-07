@@ -4,7 +4,7 @@ import { ChartFrame } from '@/components/charts/ChartFrame';
 import { TrendChart } from '@/components/charts/TrendChart';
 import { CategoryChart, StackedBarChart } from '@/components/charts/CategoryChart';
 import { DonutChart } from '@/components/charts/DonutChart';
-import { Pipeline } from '@/components/charts/Pipeline';
+
 import { RankedList } from '@/components/charts/RankedList';
 import { Heatmap } from '@/components/charts/Heatmap';
 import { ScatterChart } from '@/components/charts/ScatterChart';

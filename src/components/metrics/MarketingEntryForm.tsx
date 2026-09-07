@@ -11,26 +11,28 @@ import type { Row } from '@/config/types';
  *
  * One form, two rows written: lead performance and acquisition cost for the
  * same month. Separate tabs because the team reads them separately, but they
- * cannot be entered separately — the blended figures divide the month's spend
- * by lead counts, so an acquisition row without its lead row has nothing to
- * divide by.
+ * cannot be entered separately — the cost figures divide spend by lead counts,
+ * so an acquisition row without its lead row has nothing to divide by.
  *
- * Per-category CPL, CPVL and CAC are typed, not computed. Each would need a
- * per-category spend, which the ad accounts cannot report — but the team
- * already maintains these figures, so the platform records what they hold.
- *
- * Typed:     valid, invalid, CPL, CPVL, CAC            (per category)
- * Computed:  total leads, valid rate, spend, customers,
+ * Typed:     valid, invalid, spend, customers          (per category)
+ * Computed:  total leads, valid rate, CPL, CPVL, CAC,
  *            L2C rate                                   (per category)
- *            spend, blended CPL, CPVL, CAC, L2C rate    (month)
+ *            total spend, blended CPL, CPVL, CAC        (month)
  *
- * Spend is not entered. Leads x CPL is what a category spent, so the rupee
- * figures fall out of the metrics rather than sitting beside them where the
- * two could disagree with nothing to say which was wrong.
+ * The ratios are NOT entered. This reverses the earlier arrangement, which had
+ * the team typing CPL, CPVL and CAC because the ad accounts reported only one
+ * account-level spend. They now report it per line of business, so the rupees
+ * are observed and the ratios follow — which is the right way round. A typed
+ * ratio sitting beside a typed spend can disagree with it, and nothing in the
+ * sheet would say which was wrong.
  *
- * Valid leads x CPVL gives the same spend by a second route, and the form
- * compares the two. A gap means a digit is wrong in one of the columns; the
- * warning is shown, and what was typed is still what gets saved.
+ * Three checks the old form needed are now impossible by construction:
+ * CPVL can no longer fall below CPL (valid leads are a subset of total, so the
+ * same spend over a smaller denominator is always larger), the two routes to
+ * spend can no longer disagree because there is only one, and CAC can no
+ * longer imply more customers than leads because customers are counted rather
+ * than inferred. What remains is a genuine judgement call: customers exceeding
+ * VALID leads, which is possible but usually a miscount.
  * ------------------------------------------------------------------------- */
 
 const CATEGORIES = [
@@ -40,7 +42,7 @@ const CATEGORIES = [
 ] as const;
 
 type CatKey = typeof CATEGORIES[number]['key'];
-type FieldKey = 'valid' | 'invalid' | 'cpl' | 'cpvl' | 'cac';
+type FieldKey = 'valid' | 'invalid' | 'spend' | 'customers';
 
 const n = (v: string) => toNum(v) ?? 0;
 const has = (v: string) => String(v ?? '').trim() !== '';
@@ -50,21 +52,17 @@ const monthKey = (v: unknown): string => {
   return d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` : '';
 };
 /** The date input and the record id both need ISO; the sheet may return any
- *  locale format. */
+ *  locale format, or a Sheets serial. */
 const toISOMonth = (v: unknown): string => {
-  const raw = String(v ?? '');
-  const t = Date.parse(raw);
-  if (Number.isFinite(t)) {
-    const d = new Date(t);
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
-  }
-  return raw.slice(0, 10);
+  const d = parseDate(v);
+  if (d) return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+  return String(v ?? '').slice(0, 10);
 };
 
 type Entered = Record<CatKey, Record<FieldKey, string>>;
 
 const blankCat = (): Record<FieldKey, string> =>
-  ({ valid: '', invalid: '', cpl: '', cpvl: '', cac: '' });
+  ({ valid: '', invalid: '', spend: '', customers: '' });
 
 const BLANK: Entered = { b2c: blankCat(), b2b: blankCat(), pm: blankCat() };
 
@@ -107,9 +105,8 @@ export function MarketingEntryForm({ existing, onDone, onCancel }: {
       next[c.key] = {
         valid: v(leadRow, `${c.key}_valid`),
         invalid: v(leadRow, `${c.key}_invalid`),
-        cpl: v(acqRow, `${c.key}_cpl`),
-        cpvl: v(acqRow, `${c.key}_cpvl`),
-        cac: v(acqRow, `${c.key}_cac`),
+        spend: v(acqRow, `${c.key}_spend`),
+        customers: v(acqRow, `${c.key}_customers`),
       };
     }
     setD(next);
@@ -131,20 +128,15 @@ export function MarketingEntryForm({ existing, onDone, onCancel }: {
       const valid = n(f.valid);
       const invalid = n(f.invalid);
       const total = valid + invalid;
-      const cpl = n(f.cpl);
-      const cpvl = n(f.cpvl);
-      const cac = n(f.cac);
-
-      // Two routes to the same rupee figure. The first is authoritative
-      // because total leads is the larger, better-populated denominator; the
-      // second exists to disagree with it when a digit is wrong.
-      const spend = total > 0 && cpl > 0 ? total * cpl : 0;
-      const spendViaValid = valid > 0 && cpvl > 0 ? valid * cpvl : 0;
-      const customers = spend > 0 && cac > 0 ? Math.round(spend / cac) : 0;
+      const spend = n(f.spend);
+      const customers = n(f.customers);
 
       return {
-        ...c, valid, invalid, total, cpl, cpvl, cac, spend, spendViaValid, customers,
+        ...c, valid, invalid, total, spend, customers,
         validRate: total > 0 ? (valid / total) * 100 : null,
+        cpl: total > 0 && spend > 0 ? spend / total : null,
+        cpvl: valid > 0 && spend > 0 ? spend / valid : null,
+        cac: customers > 0 && spend > 0 ? spend / customers : null,
         l2c: total > 0 && customers > 0 ? (customers / total) * 100 : null,
       };
     });
@@ -158,9 +150,12 @@ export function MarketingEntryForm({ existing, onDone, onCancel }: {
     return {
       per, totalValid, totalInvalid, totalLeads, totalSpend, totalCustomers,
       validRate: totalLeads > 0 ? (totalValid / totalLeads) * 100 : null,
+      // Weighted by construction — total spend over total leads, never an
+      // average of the three CPLs. Averaging would treat a category bringing
+      // 226 leads as equal to one bringing 2,551.
       cpl: totalLeads > 0 && totalSpend > 0 ? totalSpend / totalLeads : null,
       cpvl: totalValid > 0 && totalSpend > 0 ? totalSpend / totalValid : null,
-      cac: totalCustomers > 0 ? totalSpend / totalCustomers : null,
+      cac: totalCustomers > 0 && totalSpend > 0 ? totalSpend / totalCustomers : null,
       l2c: totalLeads > 0 && totalCustomers > 0 ? (totalCustomers / totalLeads) * 100 : null,
     };
   }, [d]);
@@ -169,12 +164,11 @@ export function MarketingEntryForm({ existing, onDone, onCancel }: {
   const problems: string[] = [];
   for (const c of calc.per) {
     if (c.valid < 0 || c.invalid < 0) problems.push(`${c.name} lead counts cannot be negative.`);
-    for (const [label, v] of [['CPL', c.cpl], ['CPVL', c.cpvl], ['CAC', c.cac]] as const) {
-      if (v < 0) problems.push(`${c.name} ${label} cannot be negative.`);
-    }
+    if (c.spend < 0) problems.push(`${c.name} spend cannot be negative.`);
+    if (c.customers < 0) problems.push(`${c.name} customers cannot be negative.`);
     if (c.customers > c.total && c.total > 0) {
       problems.push(
-        `${c.name} CAC implies ${c.customers} customers from ${c.total} leads — more customers than leads.`);
+        `${c.name} has ${c.customers} customers from ${c.total} leads — a customer has to have been a lead first.`);
     }
   }
 
@@ -182,24 +176,22 @@ export function MarketingEntryForm({ existing, onDone, onCancel }: {
      entering it can tell whether it actually is. */
   const checks: string[] = [];
   for (const c of calc.per) {
-    // Valid leads are a subset of total, so cost per valid lead can never sit
-    // below cost per lead. Inverted means the two columns were read the wrong
-    // way round.
-    if (c.cpl > 0 && c.cpvl > 0 && c.cpvl < c.cpl) {
-      checks.push(`${c.name} CPVL (₹${c.cpvl}) is below its CPL (₹${c.cpl}) — these may be swapped.`);
+    // Possible — a lead marked invalid can still convert — but usually it
+    // means valid and invalid were entered the wrong way round.
+    if (c.customers > c.valid && c.valid > 0) {
+      checks.push(
+        `${c.name} has ${c.customers} customers but only ${c.valid} valid leads. ` +
+        `Check whether valid and invalid are the right way round.`);
     }
-    // leads x CPL and valid x CPVL are the same spend by two routes. They
-    // should agree; a gap means a digit is wrong in one of them.
-    if (c.spend > 0 && c.spendViaValid > 0) {
-      const gap = Math.abs(c.spend - c.spendViaValid) / c.spend;
-      if (gap > 0.05) {
-        checks.push(
-          `${c.name} CPL implies ₹${Math.round(c.spend).toLocaleString('en-IN')} of spend but its CPVL ` +
-          `implies ₹${Math.round(c.spendViaValid).toLocaleString('en-IN')} (${(gap * 100).toFixed(0)}% apart).`);
-      }
+    // Spend with nothing to show for it is worth a second look before it
+    // becomes a blank CAC on the dashboard.
+    if (c.spend > 0 && c.customers === 0) {
+      checks.push(`${c.name} has spend recorded but no customers, so its CAC will be blank.`);
     }
-    if (c.cac > 0 && c.cpl > 0 && c.cac < c.cpl) {
-      checks.push(`${c.name} CAC is below its CPL, which would mean more customers than leads.`);
+    // The reverse: customers with no spend leaves CAC blank too, and suggests
+    // the spend figure simply has not been filled in yet.
+    if (c.customers > 0 && c.spend === 0) {
+      checks.push(`${c.name} has customers but no spend recorded, so its CAC will be blank.`);
     }
   }
 
@@ -216,11 +208,10 @@ export function MarketingEntryForm({ existing, onDone, onCancel }: {
       const f = d[c.key];
       leadPayload[`${c.key}_valid`] = f.valid || '0';
       leadPayload[`${c.key}_invalid`] = f.invalid || '0';
-      // Blank stays blank. A metric nobody supplied should read "Data
-      // unavailable" downstream, not zero.
-      acqPayload[`${c.key}_cpl`] = has(f.cpl) ? f.cpl : '';
-      acqPayload[`${c.key}_cpvl`] = has(f.cpvl) ? f.cpvl : '';
-      acqPayload[`${c.key}_cac`] = has(f.cac) ? f.cac : '';
+      // Blank stays blank. A figure nobody supplied should read "Data
+      // unavailable" downstream, not zero — a spend of ₹0 is a claim.
+      acqPayload[`${c.key}_spend`] = has(f.spend) ? f.spend : '';
+      acqPayload[`${c.key}_customers`] = has(f.customers) ? f.customers : '';
     }
 
     try {
@@ -280,9 +271,8 @@ export function MarketingEntryForm({ existing, onDone, onCancel }: {
               <span className="formrow__hint">First of the month.</span>
             </div>
 
-            {/* Spend has no input. It is leads x CPL, so it appears here as a
-                result of the categories below rather than as a figure someone
-                could type into disagreement with them. */}
+            {/* The blended figures, as consequences of the categories below.
+                Every one of them is spend over a lead or customer count. */}
             <dl className="mk__calc">
               <div><dt>Total leads</dt><dd className="num">{calc.totalLeads || '—'}</dd></div>
               <div><dt>Total spend</dt><dd className="num">{money(calc.totalSpend || null)}</dd></div>
@@ -301,17 +291,18 @@ export function MarketingEntryForm({ existing, onDone, onCancel }: {
                 <div className="mk__grid">
                   <Field label="Valid Leads" value={d[c.key].valid} onChange={set(c.key, 'valid')} />
                   <Field label="Invalid Leads" value={d[c.key].invalid} onChange={set(c.key, 'invalid')} />
-                  <Field label="CPL" money value={d[c.key].cpl} onChange={set(c.key, 'cpl')} />
-                  <Field label="CPVL" money value={d[c.key].cpvl} onChange={set(c.key, 'cpvl')} />
-                  <Field label="CAC" money value={d[c.key].cac} onChange={set(c.key, 'cac')} />
+                  <Field label="Marketing Spend" money value={d[c.key].spend} onChange={set(c.key, 'spend')} />
+                  <Field label="Customers" value={d[c.key].customers} onChange={set(c.key, 'customers')} />
                 </div>
-                {/* Consequences of the five typed figures, not more inputs.
-                    Spend is leads x CPL; customers is that over CAC. */}
+                {/* Consequences of the four typed figures, not more inputs.
+                    Every ratio here is this category's spend over one of its
+                    own counts. */}
                 <dl className="mk__calc">
                   <div><dt>Total leads</dt><dd className="num">{p.total || '—'}</dd></div>
                   <div><dt>Valid rate</dt><dd className="num">{pctOf(p.validRate)}</dd></div>
-                  <div><dt>Spend</dt><dd className="num">{money(p.spend || null)}</dd></div>
-                  <div><dt>Customers</dt><dd className="num">{p.customers || '—'}</dd></div>
+                  <div><dt>CPL</dt><dd className="num">{money(p.cpl)}</dd></div>
+                  <div><dt>CPVL</dt><dd className="num">{money(p.cpvl)}</dd></div>
+                  <div><dt>CAC</dt><dd className="num">{money(p.cac)}</dd></div>
                   <div><dt>L2C rate</dt><dd className="num">{pctOf(p.l2c)}</dd></div>
                 </dl>
               </section>
@@ -340,8 +331,8 @@ export function MarketingEntryForm({ existing, onDone, onCancel }: {
 
           <p className="mk__note">
             Saves two rows: lead performance and acquisition cost for this month.
-            CPL, CPVL and CAC are recorded as entered. Spend, customers, lead-to-customer
-            rate and the blended figures are calculated from them.
+            Leads, spend and customers are recorded as entered. CPL, CPVL, CAC and the
+            lead-to-customer rate are calculated from them.
           </p>
 
           {problems.length > 0 && (

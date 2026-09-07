@@ -188,7 +188,7 @@ export const DATASETS: DatasetDef[] = [
 
       { key: 'city', header: 'City', type: 'enum', sheetColumn: 'City',
         required: true, editable: true, filterable: true, groupable: true,
-        enumValues: ['Bangalore', 'Chennai', 'Delhi', 'Hyderabad', 'Mumbai', 'Pune'], role: 'location' },
+        enumValues: ['Bangalore', 'Chennai', 'Delhi', 'Hyderabad', 'Mumbai', 'Pune', 'Kolkata'], role: 'location' },
 
       { key: 'location', header: 'Location', type: 'text', sheetColumn: 'Location',
         editable: true, filterable: true, groupable: true,
@@ -203,6 +203,7 @@ export const DATASETS: DatasetDef[] = [
         enumValues: ['Active', 'Inactive'], role: 'status',
         tone: { Active: 'pos', Inactive: 'idle' },
         help: 'Inactive warehouses stay in past readings but leave the dropdown.' },
+        
     ],
   },
 
@@ -270,12 +271,42 @@ export const DATASETS: DatasetDef[] = [
         derived: true, aggregate: 'sum',
         help: 'Total minus occupied. Computed, never entered.' },
 
+      
       { key: 'utilisation_pct', header: 'Utilisation %', type: 'percent', sheetColumn: 'Utilisation %',
         derived: true },
 
+      /* --- customers, entered monthly per warehouse ---
+       *
+       * Churn divides by the OPENING balance, not the closing total: the
+       * customers who joined this month were never at risk of leaving it.
+       * Opening is derived from the three entered figures, so a month is
+       * self-contained and can be corrected without touching its neighbour —
+       * and it doubles as a check, since it should equal last month's total. */
+      { key: 'total_customers', header: 'Total Customers', type: 'number',
+        sheetColumn: 'Total Customers',
+        editable: true, min: 0, aggregate: 'sum', role: 'quantity',
+        help: 'Customers at the end of this month.' },
+
+      { key: 'new_customers', header: 'New Customers', type: 'number',
+        sheetColumn: 'New Customers',
+        editable: true, min: 0, aggregate: 'sum', role: 'quantity',
+        help: 'Joined during this month.' },
+
+      { key: 'churned_customers', header: 'Customers Left', type: 'number',
+        sheetColumn: 'Customers Left',
+        editable: true, min: 0, aggregate: 'sum', role: 'quantity',
+        help: 'Left during this month.' },
+
+      { key: 'opening_customers', header: 'Opening Customers', type: 'number',
+        sheetColumn: 'Opening Customers', derived: true, aggregate: 'sum',
+        help: 'Total minus new plus left. Should match last month closing.' },
+
+              { key: 'churn_pct', header: 'Churn %', type: 'percent',
+        sheetColumn: 'Churn %', derived: true,
+        help: 'Left as a share of the opening balance. Computed, never entered.' },
+
       { key: 'entered_by', header: 'Entered By', type: 'email', sheetColumn: 'Entered By',
-        derived: true,
-        help: 'Every write is by the service account, so this is the only record of who submitted it.' },
+        derived: true, hiddenByDefault: true },
     ],
     crossFieldRules: [
       (v) => {
@@ -633,89 +664,95 @@ export const DATASETS: DatasetDef[] = [
       { key: 'month', header: 'Month', type: 'date', sheetColumn: 'Month',
         required: true, filterable: true, sortable: true, unique: true, role: 'date',
         help: 'Must match a month already present in Lead Performance.' },
-
-      /* --- entered: spend --- */
-      /* --- entered: the three cost metrics, per category ---
-       *
-       * Typed rather than computed, because the ad accounts report one
-       * account-level spend and the campaigns carry no line-of-business label,
-       * so no per-category cost can be measured here. The team already
-       * maintains these figures; the platform records what they hold.
-       *
-       * Everything below this point is arithmetic over these three and the
-       * lead counts, which is what keeps the row internally consistent. */
-      { key: 'b2c_cpl', header: 'B2C CPL', type: 'currency', sheetColumn: 'B2C CPL',
-        editable: true, min: 0, role: 'cost' },
-      { key: 'b2b_cpl', header: 'B2B CPL', type: 'currency', sheetColumn: 'B2B CPL',
-        editable: true, min: 0, role: 'cost' },
-      { key: 'pm_cpl', header: 'P&M CPL', type: 'currency', sheetColumn: 'P&M CPL',
-        editable: true, min: 0, role: 'cost' },
-
-      { key: 'b2c_cpvl', header: 'B2C CPVL', type: 'currency', sheetColumn: 'B2C CPVL',
-        editable: true, min: 0, role: 'cost' },
-      { key: 'b2b_cpvl', header: 'B2B CPVL', type: 'currency', sheetColumn: 'B2B CPVL',
-        editable: true, min: 0, role: 'cost' },
-      { key: 'pm_cpvl', header: 'P&M CPVL', type: 'currency', sheetColumn: 'P&M CPVL',
-        editable: true, min: 0, role: 'cost' },
-
-      { key: 'b2c_cac', header: 'B2C CAC', type: 'currency', sheetColumn: 'B2C CAC',
-        editable: true, min: 0, role: 'cost' },
-      { key: 'b2b_cac', header: 'B2B CAC', type: 'currency', sheetColumn: 'B2B CAC',
-        editable: true, min: 0, role: 'cost' },
-      { key: 'pm_cac', header: 'P&M CAC', type: 'currency', sheetColumn: 'P&M CAC',
-        editable: true, min: 0, role: 'cost' },
-
-      /* --- derived: spend, back-computed from CPL x leads ---
-       *
-       * Cost per lead times the lead count is what that category spent. This
-       * is the one bridge from the typed metrics to rupees, and it is why
-       * spend is no longer entered: a typed total and three typed CPLs could
-       * disagree, and there would be no way to tell which was wrong.
-       *
-       * Valid leads x CPVL gives the same figure by a second route. The entry
-       * form compares the two and flags a gap, which catches a mistyped
-       * digit in either column. */
       { key: 'b2c_spend', header: 'B2C Marketing Spend', type: 'currency',
-        sheetColumn: 'B2C Marketing Spend', derived: true, aggregate: 'sum', role: 'cost' },
+        sheetColumn: 'B2C Marketing Spend',
+        editable: true, min: 0, aggregate: 'sum', role: 'cost' },
       { key: 'b2b_spend', header: 'B2B Marketing Spend', type: 'currency',
-        sheetColumn: 'B2B Marketing Spend', derived: true, aggregate: 'sum', role: 'cost' },
+        sheetColumn: 'B2B Marketing Spend',
+        editable: true, min: 0, aggregate: 'sum', role: 'cost' },
       { key: 'pm_spend', header: 'P&M Marketing Spend', type: 'currency',
-        sheetColumn: 'P&M Marketing Spend', derived: true, aggregate: 'sum', role: 'cost' },
+        sheetColumn: 'P&M Marketing Spend',
+        editable: true, min: 0, aggregate: 'sum', role: 'cost' },
+ 
+      /* --- ENTERED: customers won per category ---
+       *
+       * Counted, not implied. CAC divides spend by this, so without it there
+       * is no honest CAC — which is why it is entered rather than derived
+       * from a CAC the team would otherwise have to supply. */
+      { key: 'b2c_customers', header: 'B2C Customers', type: 'number',
+        sheetColumn: 'B2C Customers',
+        editable: true, min: 0, aggregate: 'sum', role: 'quantity',
+        help: 'Leads that became paying customers this month.' },
+      { key: 'b2b_customers', header: 'B2B Customers', type: 'number',
+        sheetColumn: 'B2B Customers',
+        editable: true, min: 0, aggregate: 'sum', role: 'quantity' },
+      { key: 'pm_customers', header: 'P&M Customers', type: 'number',
+        sheetColumn: 'P&M Customers',
+        editable: true, min: 0, aggregate: 'sum', role: 'quantity' },
+ 
+      /* --- DERIVED: month roll-up ---
+       *
+       * Summed, never typed. A typed total that disagrees with three typed
+       * parts leaves nothing to say which of the four is wrong. */
       { key: 'total_spend', header: 'Total Marketing Spend', type: 'currency',
         sheetColumn: 'Total Marketing Spend', derived: true, aggregate: 'sum', role: 'cost' },
-
-      /* --- derived: customers, from spend / CAC --- */
-      { key: 'b2c_customers', header: 'B2C Customers', type: 'number',
-        sheetColumn: 'B2C Customers', derived: true, aggregate: 'sum' },
-      { key: 'b2b_customers', header: 'B2B Customers', type: 'number',
-        sheetColumn: 'B2B Customers', derived: true, aggregate: 'sum' },
-      { key: 'pm_customers', header: 'P&M Customers', type: 'number',
-        sheetColumn: 'P&M Customers', derived: true, aggregate: 'sum' },
       { key: 'total_customers', header: 'Total Customers', type: 'number',
-        sheetColumn: 'Total Customers', derived: true, aggregate: 'sum',
-        help: 'Implied by spend and CAC, not a counted figure from HubSpot.' },
-
-      /* --- derived: lead to customer rate = customers / total leads --- */
+        sheetColumn: 'Total Customers', derived: true, aggregate: 'sum' },
+ 
+      /* --- DERIVED: cost per lead = spend / total leads --- */
+      { key: 'b2c_cpl', header: 'B2C CPL', type: 'currency', sheetColumn: 'B2C CPL',
+        derived: true, role: 'cost' },
+      { key: 'b2b_cpl', header: 'B2B CPL', type: 'currency', sheetColumn: 'B2B CPL',
+        derived: true, role: 'cost' },
+      { key: 'pm_cpl', header: 'P&M CPL', type: 'currency', sheetColumn: 'P&M CPL',
+        derived: true, role: 'cost' },
+ 
+      /* --- DERIVED: cost per valid lead = spend / valid leads --- */
+      { key: 'b2c_cpvl', header: 'B2C CPVL', type: 'currency', sheetColumn: 'B2C CPVL',
+        derived: true, role: 'cost' },
+      { key: 'b2b_cpvl', header: 'B2B CPVL', type: 'currency', sheetColumn: 'B2B CPVL',
+        derived: true, role: 'cost' },
+      { key: 'pm_cpvl', header: 'P&M CPVL', type: 'currency', sheetColumn: 'P&M CPVL',
+        derived: true, role: 'cost' },
+ 
+      /* --- DERIVED: customer acquisition cost = spend / customers --- */
+      { key: 'b2c_cac', header: 'B2C CAC', type: 'currency', sheetColumn: 'B2C CAC',
+        derived: true, role: 'cost' },
+      { key: 'b2b_cac', header: 'B2B CAC', type: 'currency', sheetColumn: 'B2B CAC',
+        derived: true, role: 'cost' },
+      { key: 'pm_cac', header: 'P&M CAC', type: 'currency', sheetColumn: 'P&M CAC',
+        derived: true, role: 'cost' },
+ 
+      /* --- DERIVED: lead to customer rate = customers / total leads --- */
       { key: 'b2c_l2c', header: 'B2C Lead to Customer Rate', type: 'percent',
         sheetColumn: 'B2C Lead to Customer Rate', derived: true },
       { key: 'b2b_l2c', header: 'B2B Lead to Customer Rate', type: 'percent',
         sheetColumn: 'B2B Lead to Customer Rate', derived: true },
       { key: 'pm_l2c', header: 'P&M Lead to Customer Rate', type: 'percent',
         sheetColumn: 'P&M Lead to Customer Rate', derived: true },
-
-      /* --- derived: blended across all three categories --- */
+ 
+      /* --- DERIVED: blended across all three categories ---
+       *
+       * Weighted by construction — total spend over total leads, not an
+       * average of the three CPLs. A straight average would treat a category
+       * bringing 226 leads as equal to one bringing 2,551. */
       { key: 'cpl', header: 'Blended CPL', type: 'currency', sheetColumn: 'Blended CPL', derived: true },
       { key: 'cpvl', header: 'Blended CPVL', type: 'currency', sheetColumn: 'Blended CPVL', derived: true },
       { key: 'cac', header: 'Blended CAC', type: 'currency', sheetColumn: 'Blended CAC', derived: true },
       { key: 'l2c_rate', header: 'Lead to Customer Rate', type: 'percent',
         sheetColumn: 'Lead to Customer Rate', derived: true },
-
-      /* --- derived: the lead counts everything above was divided by --- */
+ 
+      /* --- DERIVED: the lead counts everything above was divided by ---
+       *
+       * Snapshotted at write time, not joined at read time. Correcting March's
+       * leads in June must not silently rewrite March's CPL — the figure would
+       * still render, it would just quietly describe a denominator that no
+       * longer exists. Same reasoning as the warehouse readings snapshot. */
       { key: 'leads_at_entry', header: 'Total Leads (at entry)', type: 'number',
         sheetColumn: 'Total Leads (at entry)', derived: true, hiddenByDefault: true },
       { key: 'valid_at_entry', header: 'Valid Leads (at entry)', type: 'number',
         sheetColumn: 'Valid Leads (at entry)', derived: true, hiddenByDefault: true },
-
+ 
       { key: 'entered_by', header: 'Entered By', type: 'email', sheetColumn: 'Entered By',
         derived: true, hiddenByDefault: true },
     ],

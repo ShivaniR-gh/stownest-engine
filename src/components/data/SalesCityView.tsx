@@ -10,8 +10,13 @@ import type { Row } from '@/config/types';
 /** ---------------------------------------------------------------------------
  * Sales by city.
  *
- * The circulated table, plus what changed since last month, plus the three
- * charts that show something the table cannot.
+ * The month's totals as cards, the circulated table, what changed since last
+ * month, and the three charts that show something the table cannot.
+ *
+ * The totals lead because they are the headline. Left in the table footer they
+ * sat behind six columns of horizontal scroll, which is the wrong place for
+ * the one line most people came to read. The footer keeps them too — it is
+ * what makes the columns above it check out.
  *
  * TWO deltas per city, not one. A city can take more orders while its value
  * falls — smaller deals, or discounting — and a single arrow would hide
@@ -23,10 +28,10 @@ import type { Row } from '@/config/types';
  * and that is exactly backwards. The absolute change leads; the percentage is
  * secondary and only shown where the base can carry it.
  *
- * The charts are deliberately few. A bar chart of the Value column is the
- * table redrawn: it looks like analysis and tells you nothing the row above it
- * did not. What earns a frame here is a trend the single-month table cannot
- * show at all, and a relationship between two columns that no column shows.
+ * Colour is deliberately thin on the ground. The table is dense with figures
+ * and the only thing that should carry colour is the deltas, where red and
+ * green mean something. Tinted cards with a coloured edge give the eye a
+ * landing point without competing with them.
  * ------------------------------------------------------------------------- */
 
 const n = (v: unknown) => toNum(v) ?? 0;
@@ -81,6 +86,32 @@ function Delta({ now, prev, money }: { now: number; prev: number; money?: boolea
   );
 }
 
+/** One total, as a card. The tint is a left edge rather than a fill: six solid
+ *  blocks compete with each other and nothing reads as more important. */
+function TotalCard({ label, value, tint, delta }: {
+  label: string; value: string; tint: string; delta?: React.ReactNode;
+}) {
+  return (
+    <div style={{
+      padding: 'var(--s4)',
+      borderRadius: 'var(--r-md)',
+      border: '1px solid var(--line)',
+      borderLeft: `3px solid ${tint}`,
+      background: `linear-gradient(135deg, ${tint}12, ${tint}04)`,
+    }}>
+      <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--ink-600)', marginBottom: 6 }}>
+        {label}
+      </div>
+      <div style={{
+        fontSize: 24, fontWeight: 650, color: 'var(--ink-900)', letterSpacing: '-0.01em',
+      }}>
+        {value}
+      </div>
+      {delta && <div style={{ marginTop: 4 }}>{delta}</div>}
+    </div>
+  );
+}
+
 export function SalesCityView({ rows, label, variant = 'records', onEdit }: {
   rows: Row[];
   /** Line of business, for the section heading. */
@@ -113,12 +144,15 @@ export function SalesCityView({ rows, label, variant = 'records', onEdit }: {
   const totals = useMemo(() => {
     const leads = sumCities(cur, 'leads');
     const orders = sumCities(cur, 'orders');
+    const addon = sumCities(cur, 'addon');
     return {
-      leads, orders, value: sumCities(cur, 'value'), addon: sumCities(cur, 'addon'),
+      leads, orders, addon,
+      value: sumCities(cur, 'value'),
       conv: leads > 0 ? (orders / leads) * 100 : 0,
-      total: orders + sumCities(cur, 'addon'),
-      prevValue: sumCities(prev, 'value'),
+      total: orders + addon,
+      prevLeads: sumCities(prev, 'leads'),
       prevOrders: sumCities(prev, 'orders'),
+      prevValue: sumCities(prev, 'value'),
     };
   }, [cur, prev]);
 
@@ -163,24 +197,42 @@ export function SalesCityView({ rows, label, variant = 'records', onEdit }: {
 
   return (
     <>
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 'var(--s3)',
+        marginBottom: 'var(--s3)',
+      }}>
+        <h3 className="cef__sec" style={{ marginTop: 0, flex: 1 }}>
+          {label} — {monthLabel(cur?.month)}
+        </h3>
+        <select className="field" style={{ maxWidth: 170 }}
+          value={newestFirst[idx]?.[0] ?? ''} onChange={e => setPick(e.target.value)}
+          aria-label="Month">
+          {newestFirst.map(([k, r]) => (
+            <option key={k} value={k}>{monthLabel(r.month)}</option>
+          ))}
+        </select>
+        {onEdit && cur && (
+          <button className="pop__item" onClick={() => onEdit(cur)}>Edit</button>
+        )}
+      </div>
+
+      <div style={{
+        display: 'grid', gap: 'var(--s3)', marginBottom: 'var(--s4)',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+      }}>
+        <TotalCard label="Leads" tint="#3b82f6" value={formatInt(totals.leads)}
+          delta={<Delta now={totals.leads} prev={totals.prevLeads} />} />
+        <TotalCard label="Orders" tint="#6366f1" value={formatInt(totals.orders)}
+          delta={<Delta now={totals.orders} prev={totals.prevOrders} />} />
+        <TotalCard label="Conversion" tint="#8b5cf6" value={formatPct(totals.conv, 0)} />
+        <TotalCard label="Value" tint="#059669" value={formatINRCompact(totals.value)}
+          delta={<Delta now={totals.value} prev={totals.prevValue} money />} />
+        <TotalCard label="Add on" tint="#f59e0b" value={formatInt(totals.addon)} />
+        <TotalCard label="Total" tint="#0ea5e9" value={formatInt(totals.total)} />
+      </div>
+
       <div className="card">
         <div className="card__bd">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s3)' }}>
-            <h3 className="cef__sec" style={{ marginTop: 0, flex: 1 }}>
-              {label} — {monthLabel(cur?.month)}
-            </h3>
-            <select className="field" style={{ maxWidth: 170 }}
-              value={newestFirst[idx]?.[0] ?? ''} onChange={e => setPick(e.target.value)}
-              aria-label="Month">
-              {newestFirst.map(([k, r]) => (
-                <option key={k} value={k}>{monthLabel(r.month)}</option>
-              ))}
-            </select>
-            {onEdit && cur && (
-              <button className="pop__item" onClick={() => onEdit(cur)}>Edit</button>
-            )}
-          </div>
-
           <div style={{ overflowX: 'auto' }}>
             <table className="xpose">
               <thead>
