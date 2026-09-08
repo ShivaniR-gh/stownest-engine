@@ -170,11 +170,10 @@ function LeadView({ ordered, orderedAcq, current, previous, acqCurrent, picker, 
       values: Object.fromEntries(CATEGORIES.map(c => [c.key, n(r, `${c.key}_${metric}`)])),
     }));
 
-  const cplTrend = useMemo(() => costSeries('cpl'), [orderedAcq]);
   const cacTrend = useMemo(() => costSeries('cac'), [orderedAcq]);
 
   const catSeries = CATEGORIES.map((c, i) => ({
-    id: c.key, label: c.name, kind: 'bar' as const, colorIndex: i,
+    id: c.key, label: c.name, kind: 'line' as const, colorIndex: i,
   }));
 
   return (
@@ -262,20 +261,10 @@ function LeadView({ ordered, orderedAcq, current, previous, acqCurrent, picker, 
         </div>
 
         <div style={{ marginTop: 'var(--s4)' }}>
-          <ChartFrame title="Cost per lead by category" department="marketing" height={240}
-            question="Which line of business is getting dearer to reach?"
-            isEmpty={cplTrend.length < 1}>
-            {h => (
-              <TrendChart height={h} data={cplTrend} valueFormat={formatINR} series={catSeries}
-                onPointClick={p => drill(`Acquisition — ${p.label}`, 'marketing_acquisition', p.rows)} />
-            )}
-          </ChartFrame>
-        </div>
-
-        <div style={{ marginTop: 'var(--s4)' }}>
-          <ChartFrame title="Customer acquisition cost by category" department="marketing" height={240}
-            question="What does a paying customer cost in each line of business?"
-            isEmpty={cacTrend.length < 1}>
+          <ChartFrame title="Customer acquisition cost over time" department="marketing" height={280}
+            question="Which line of business is getting dearer to win a customer in?"
+            isEmpty={cacTrend.length < 2}
+            emptyBody="Two months are needed before a trend means anything.">
             {h => (
               <TrendChart height={h} data={cacTrend} valueFormat={formatINR} series={catSeries}
                 onPointClick={p => drill(`Acquisition — ${p.label}`, 'marketing_acquisition', p.rows)} />

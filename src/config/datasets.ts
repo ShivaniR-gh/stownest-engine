@@ -339,6 +339,7 @@ export const DATASETS: DatasetDef[] = [
     dateColumn: 'month',
     transposable: true,
     combinedEntry: true,
+    entryForm: 'collections',
     defaultSort: { key: 'month', dir: 'desc' },
     auditable: true,
     columns: [

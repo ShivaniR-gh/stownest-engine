@@ -4,34 +4,30 @@ import { ChartFrame } from '@/components/charts/ChartFrame';
 import { TrendChart } from '@/components/charts/TrendChart';
 import { StackedBarChart } from '@/components/charts/CategoryChart';
 import { ScatterChart } from '@/components/charts/ScatterChart';
+import { SectionHeader } from '@/components/metrics/MetricCard';
 import { formatINR, formatINRCompact, formatInt, formatPct, parseDate, toNum } from '@/lib/format';
 import type { Row } from '@/config/types';
 
 /** ---------------------------------------------------------------------------
  * Sales by city.
  *
- * The month's totals as cards, the circulated table, what changed since last
- * month, and the three charts that show something the table cannot.
+ * Two views over the same month. The DASHBOARD answers "how did we do" — four
+ * headline figures and five columns, nothing that needs horizontal scrolling.
+ * RECORDS answers "what exactly is in the sheet" — every column, both deltas,
+ * and the edit affordance.
  *
- * The totals lead because they are the headline. Left in the table footer they
- * sat behind six columns of horizontal scroll, which is the wrong place for
- * the one line most people came to read. The footer keeps them too — it is
- * what makes the columns above it check out.
+ * Splitting them is what fixes the old layout. One table carrying nine columns
+ * and six KPI cards had to scroll sideways to reach Add on, so the two figures
+ * a manager actually reads sat off-screen while a card showing an em dash took
+ * up a quarter of the row.
  *
- * TWO deltas per city, not one. A city can take more orders while its value
- * falls — smaller deals, or discounting — and a single arrow would hide
- * whichever half it did not represent. Volume and revenue are separate
- * questions and get separate columns.
+ * TWO deltas per city in the records view, not one. A city can take more
+ * orders while its value falls — smaller deals, or discounting — and a single
+ * arrow would hide whichever half it did not represent.
  *
  * Percentages are suppressed under ten orders. Kolkata going from 6 to 8 is
  * "+33%", which on a dashboard reads louder than Bangalore moving 163 to 170,
- * and that is exactly backwards. The absolute change leads; the percentage is
- * secondary and only shown where the base can carry it.
- *
- * Colour is deliberately thin on the ground. The table is dense with figures
- * and the only thing that should carry colour is the deltas, where red and
- * green mean something. Tinted cards with a coloured edge give the eye a
- * landing point without competing with them.
+ * and that is exactly backwards.
  * ------------------------------------------------------------------------- */
 
 const n = (v: unknown) => toNum(v) ?? 0;
@@ -86,28 +82,17 @@ function Delta({ now, prev, money }: { now: number; prev: number; money?: boolea
   );
 }
 
-/** One total, as a card. The tint is a left edge rather than a fill: six solid
- *  blocks compete with each other and nothing reads as more important. */
-function TotalCard({ label, value, tint, delta }: {
-  label: string; value: string; tint: string; delta?: React.ReactNode;
+/** One headline figure, on the same gradient treatment collections uses. The
+ *  hue is fixed per position rather than rotating, so Leads does not change
+ *  colour when a card is added beside it. */
+function Kpi({ i, label, value, note }: {
+  i: number; label: string; value: string; note?: React.ReactNode;
 }) {
   return (
-    <div style={{
-      padding: 'var(--s4)',
-      borderRadius: 'var(--r-md)',
-      border: '1px solid var(--line)',
-      borderLeft: `3px solid ${tint}`,
-      background: `linear-gradient(135deg, ${tint}12, ${tint}04)`,
-    }}>
-      <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--ink-600)', marginBottom: 6 }}>
-        {label}
-      </div>
-      <div style={{
-        fontSize: 24, fontWeight: 650, color: 'var(--ink-900)', letterSpacing: '-0.01em',
-      }}>
-        {value}
-      </div>
-      {delta && <div style={{ marginTop: 4 }}>{delta}</div>}
+    <div className="metric coll__kpi" data-kpi={i}>
+      <div className="metric__label">{label}</div>
+      <div className="metric__value num">{value}</div>
+      {note && <div className="metric__cmp">{note}</div>}
     </div>
   );
 }
@@ -116,9 +101,9 @@ export function SalesCityView({ rows, label, variant = 'records', onEdit }: {
   rows: Row[];
   /** Line of business, for the section heading. */
   label: string;
-  /** 'dashboard' adds the charts below the table. */
+  /** 'dashboard' shows headline cards, five columns and the charts.
+   *  'records' shows every column, both deltas and the edit button. */
   variant?: 'records' | 'dashboard';
-  /** Omitted on the dashboard, where the table is read rather than edited. */
   onEdit?: (r: Row) => void;
 }) {
   /** Oldest first for the charts; the table reverses for its picker. */
@@ -164,8 +149,7 @@ export function SalesCityView({ rows, label, variant = 'records', onEdit }: {
   })), [months]);
 
   /** Value per city per month, stacked, so the bar height is the month and the
-   *  bands inside it are the mix. Two separate charts would make you compare
-   *  by eye. */
+   *  bands inside it are the mix. */
   const composition = useMemo(() => months.slice(-TREND_MONTHS).map(([k, r]) => ({
     key: k, label: monthLabel(r.month), rows: [r],
     values: Object.fromEntries(CITIES.map(c => [c.key, n(r[`${c.key}_value`])])),
@@ -194,58 +178,77 @@ export function SalesCityView({ rows, label, variant = 'records', onEdit }: {
   }
 
   const valueDiff = totals.value - totals.prevValue;
+  const dash = variant === 'dashboard';
+
+  const picker = (
+    <label className="coll__month">
+      <select value={newestFirst[idx]?.[0] ?? ''} onChange={e => setPick(e.target.value)}
+        aria-label="Month">
+        {newestFirst.map(([k, r]) => (
+          <option key={k} value={k}>{monthLabel(r.month)}</option>
+        ))}
+      </select>
+    </label>
+  );
 
   return (
     <>
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 'var(--s3)',
-        marginBottom: 'var(--s3)',
-      }}>
-        <h3 className="cef__sec" style={{ marginTop: 0, flex: 1 }}>
-          {label} — {monthLabel(cur?.month)}
-        </h3>
-        <select className="field" style={{ maxWidth: 170 }}
-          value={newestFirst[idx]?.[0] ?? ''} onChange={e => setPick(e.target.value)}
-          aria-label="Month">
-          {newestFirst.map(([k, r]) => (
-            <option key={k} value={k}>{monthLabel(r.month)}</option>
-          ))}
-        </select>
-        {onEdit && cur && (
-          <button className="pop__item" onClick={() => onEdit(cur)}>Edit</button>
+      <section className="section">
+        <SectionHeader title={label} note={monthLabel(cur?.month)} action={
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s3)' }}>
+            {picker}
+            {onEdit && cur && (
+              <button className="pop__item" onClick={() => onEdit(cur)}>Edit</button>
+            )}
+          </div>
+        } />
+
+        {/* Four figures, not six. Add on and Total are consequences of orders
+            rather than independent results, so they live in the table where
+            the arithmetic is visible beside them. */}
+        <div className="grid grid--kpi">
+          <Kpi i={1} label="Leads" value={formatInt(totals.leads)}
+            note={<Delta now={totals.leads} prev={totals.prevLeads} />} />
+          <Kpi i={2} label="Orders" value={formatInt(totals.orders)}
+            note={<Delta now={totals.orders} prev={totals.prevOrders} />} />
+          <Kpi i={3} label="Conversion" value={formatPct(totals.conv, 1)}
+            note={<span className="mk__note">Orders as a share of leads</span>} />
+          <Kpi i={4} label="Value" value={formatINRCompact(totals.value)}
+            note={<Delta now={totals.value} prev={totals.prevValue} money />} />
+        </div>
+
+        {/* Add on and Total, as a quiet strip rather than two more gradient
+            cards competing with the four above. */}
+        {!dash && (
+          <div className="coll__strip">
+            <div className="coll__cell">
+              <span className="coll__lb">Add on</span>
+              <span className="coll__v num">{formatInt(totals.addon)}</span>
+            </div>
+            <div className="coll__cell">
+              <span className="coll__lb">Total</span>
+              <span className="coll__v num">{formatInt(totals.total)}</span>
+            </div>
+          </div>
         )}
-      </div>
+      </section>
 
-      <div style={{
-        display: 'grid', gap: 'var(--s3)', marginBottom: 'var(--s4)',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-      }}>
-        <TotalCard label="Leads" tint="#3b82f6" value={formatInt(totals.leads)}
-          delta={<Delta now={totals.leads} prev={totals.prevLeads} />} />
-        <TotalCard label="Orders" tint="#6366f1" value={formatInt(totals.orders)}
-          delta={<Delta now={totals.orders} prev={totals.prevOrders} />} />
-        <TotalCard label="Conversion" tint="#8b5cf6" value={formatPct(totals.conv, 0)} />
-        <TotalCard label="Value" tint="#059669" value={formatINRCompact(totals.value)}
-          delta={<Delta now={totals.value} prev={totals.prevValue} money />} />
-        <TotalCard label="Add on" tint="#f59e0b" value={formatInt(totals.addon)} />
-        <TotalCard label="Total" tint="#0ea5e9" value={formatInt(totals.total)} />
-      </div>
-
-      <div className="card">
-        <div className="card__bd">
+      <section className="section">
+        <SectionHeader title="By city" note={monthLabel(cur?.month)} />
+        <div className="card"><div className="card__bd">
           <div style={{ overflowX: 'auto' }}>
-            <table className="xpose">
+            <table className="captbl">
               <thead>
                 <tr>
-                  <th scope="col" className="xpose__rowhd">City</th>
+                  <th scope="col">City</th>
                   <th scope="col" className="is-num">Leads</th>
                   <th scope="col" className="is-num">Orders</th>
-                  <th scope="col" className="is-num">vs prev</th>
+                  {!dash && <th scope="col" className="is-num">vs prev</th>}
                   <th scope="col" className="is-num">Conversion</th>
                   <th scope="col" className="is-num">Value</th>
-                  <th scope="col" className="is-num">vs prev</th>
-                  <th scope="col" className="is-num">Add on</th>
-                  <th scope="col" className="is-num">Total</th>
+                  {!dash && <th scope="col" className="is-num">vs prev</th>}
+                  {!dash && <th scope="col" className="is-num">Add on</th>}
+                  {!dash && <th scope="col" className="is-num">Total</th>}
                 </tr>
               </thead>
               <tbody>
@@ -256,40 +259,48 @@ export function SalesCityView({ rows, label, variant = 'records', onEdit }: {
                   const addon = n(cur?.[`${c.key}_addon`]);
                   return (
                     <tr key={c.key}>
-                      <th scope="row" className="xpose__rowhd">{c.name}</th>
+                      <td className="is-key">{c.name}</td>
                       <td className="is-num">{formatInt(leads)}</td>
                       <td className="is-num">{formatInt(orders)}</td>
-                      <td className="is-num">
-                        <Delta now={orders} prev={n(prev?.[`${c.key}_orders`])} />
-                      </td>
+                      {!dash && (
+                        <td className="is-num">
+                          <Delta now={orders} prev={n(prev?.[`${c.key}_orders`])} />
+                        </td>
+                      )}
                       <td className="is-num">
                         {leads > 0 ? formatPct((orders / leads) * 100, 0) : '—'}
                       </td>
                       <td className="is-num">{formatINRCompact(value)}</td>
-                      <td className="is-num">
-                        <Delta now={value} prev={n(prev?.[`${c.key}_value`])} money />
-                      </td>
-                      <td className="is-num">{formatInt(addon)}</td>
-                      <td className="is-num">{formatInt(orders + addon)}</td>
+                      {!dash && (
+                        <td className="is-num">
+                          <Delta now={value} prev={n(prev?.[`${c.key}_value`])} money />
+                        </td>
+                      )}
+                      {!dash && <td className="is-num">{formatInt(addon)}</td>}
+                      {!dash && <td className="is-num">{formatInt(orders + addon)}</td>}
                     </tr>
                   );
                 })}
               </tbody>
               <tfoot>
-                <tr className="xpose__foot">
-                  <th scope="row" className="xpose__rowhd">Total</th>
-                  <td className="is-num">{formatInt(totals.leads)}</td>
-                  <td className="is-num">{formatInt(totals.orders)}</td>
-                  <td className="is-num">
-                    <Delta now={totals.orders} prev={totals.prevOrders} />
-                  </td>
-                  <td className="is-num">{formatPct(totals.conv, 0)}</td>
-                  <td className="is-num">{formatINRCompact(totals.value)}</td>
-                  <td className="is-num">
-                    <Delta now={totals.value} prev={totals.prevValue} money />
-                  </td>
-                  <td className="is-num">{formatInt(totals.addon)}</td>
-                  <td className="is-num">{formatInt(totals.total)}</td>
+                <tr>
+                  <td className="is-key"><b>Total</b></td>
+                  <td className="is-num"><b>{formatInt(totals.leads)}</b></td>
+                  <td className="is-num"><b>{formatInt(totals.orders)}</b></td>
+                  {!dash && (
+                    <td className="is-num">
+                      <Delta now={totals.orders} prev={totals.prevOrders} />
+                    </td>
+                  )}
+                  <td className="is-num"><b>{formatPct(totals.conv, 0)}</b></td>
+                  <td className="is-num"><b>{formatINRCompact(totals.value)}</b></td>
+                  {!dash && (
+                    <td className="is-num">
+                      <Delta now={totals.value} prev={totals.prevValue} money />
+                    </td>
+                  )}
+                  {!dash && <td className="is-num"><b>{formatInt(totals.addon)}</b></td>}
+                  {!dash && <td className="is-num"><b>{formatInt(totals.total)}</b></td>}
                 </tr>
               </tfoot>
             </table>
@@ -309,12 +320,14 @@ export function SalesCityView({ rows, label, variant = 'records', onEdit }: {
           ) : (
             <p className="cef__note">No earlier month recorded, so there is nothing to compare against.</p>
           )}
-        </div>
-      </div>
+        </div></div>
+      </section>
 
-      {variant === 'dashboard' && (
-        <>
-          <div className="grid grid--split" style={{ marginTop: 'var(--s4)' }}>
+      {dash && (
+        <section className="section">
+          <SectionHeader title="Analysis" />
+
+          <div className="grid grid--split">
             <ChartFrame title="Revenue against orders" department="sales" height={260}
               question="Is revenue growing, and is it more orders or bigger ones?"
               isEmpty={trend.length < 2}
@@ -352,7 +365,7 @@ export function SalesCityView({ rows, label, variant = 'records', onEdit }: {
               )}
             </ChartFrame>
           </div>
-        </>
+        </section>
       )}
     </>
   );
