@@ -3,7 +3,7 @@ import '@/styles/marketing.css';
 import type { Row } from '@/config/types';
 import { ChartFrame } from '@/components/charts/ChartFrame';
 import { TrendChart } from '@/components/charts/TrendChart';
-import { CategoryChart, StackedBarChart } from '@/components/charts/CategoryChart';
+import { StackedBarChart } from '@/components/charts/CategoryChart';
 import { DonutChart } from '@/components/charts/DonutChart';
 import { SectionHeader } from '@/components/metrics/MetricCard';
 import { EmptyState } from '@/components/primitives';
@@ -17,11 +17,20 @@ import { formatINR, formatINRCompact, formatInt, formatPct, parseDate, toNum } f
  * switcher in the page header, so there is one control rather than two that
  * disagree.
  *
+ * The KPI row is lead COUNTS only. Cost belongs per category, because that is
+ * where a decision gets made — a blended CPL of ₹526 cannot tell you whether
+ * to move budget between B2C and B2B, and the three category figures tell you
+ * everything the blended one would have.
+ *
+ * Valid and invalid carry their share of the month alongside the count. The
+ * two shares are complements, which looks like a wasted box until you notice
+ * that reading "1,093 invalid" without "43% of the month" is what lets a bad
+ * month pass for a big one.
+ *
  * Category names ARE fixed here, unlike the collections segments. That is a
  * deliberate difference: collections reads its segments from sheet rows, but
  * these three are schema columns (b2b_/b2c_/pm_ prefixes), so a fourth line of
- * business is a schema change either way. Naming them once here and reading
- * the prefix off the column keys keeps the two files honest with each other.
+ * business is a schema change either way.
  * ------------------------------------------------------------------------- */
 
 const CATEGORIES = [
@@ -29,6 +38,9 @@ const CATEGORIES = [
   { key: 'b2b', name: 'B2B' },
   { key: 'pm', name: 'Packing & Moving' },
 ] as const;
+
+/** How many months the cost charts reach back. */
+const TREND_MONTHS = 12;
 
 const n = (r: Row | null | undefined, k: string) => (r ? toNum(r[k]) ?? 0 : 0);
 
@@ -81,19 +93,16 @@ export function MarketingDashboard({ leads, acq, view, drill }: {
   }, [source, current]);
 
   /**
-   * The acquisition rows for the same months the lead view is showing.
+   * The acquisition row for the month the lead view is showing.
    *
    * Matched on month key rather than by index: the two tabs are written
    * separately, so a month can exist in one and not the other, and lining them
    * up positionally would eventually pair a lead count with another month's
-   * spend. Absent means absent — the cost cards then read as em dashes.
+   * spend. Absent means absent — the cost figures then read as em dashes.
    */
   const acqCurrent = useMemo(
     () => orderedAcq.find(r => monthKey(r.month) === monthKey(current?.month)) ?? null,
     [orderedAcq, current]);
-  const acqPrevious = useMemo(
-    () => orderedAcq.find(r => monthKey(r.month) === monthKey(previous?.month)) ?? null,
-    [orderedAcq, previous]);
 
   if (!source.length || !current) {
     return (
@@ -118,9 +127,8 @@ export function MarketingDashboard({ leads, acq, view, drill }: {
   );
 
   return view === 'leads'
-    ? <LeadView ordered={orderedLeads} current={current} previous={previous}
-        acqCurrent={acqCurrent} acqPrevious={acqPrevious}
-        picker={picker} drill={drill} />
+    ? <LeadView ordered={orderedLeads} orderedAcq={orderedAcq} current={current}
+        previous={previous} acqCurrent={acqCurrent} picker={picker} drill={drill} />
     : <CostView ordered={orderedAcq} current={current} previous={previous}
         picker={picker} drill={drill} />;
 }
@@ -129,63 +137,66 @@ export function MarketingDashboard({ leads, acq, view, drill }: {
 /* Lead performance                                                           */
 /* -------------------------------------------------------------------------- */
 
-function LeadView({ ordered, current, previous, acqCurrent, acqPrevious, picker, drill }: ViewProps) {
+function LeadView({ ordered, orderedAcq, current, previous, acqCurrent, picker, drill }: ViewProps) {
   const totalValid = n(current, 'total_valid');
-
-  /**
-   * Cost metrics come from the acquisition row, not this one.
-   *
-   * They are on the lead view because the first question anyone asks after
-   * seeing lead volume is what those leads cost, and making them switch tabs
-   * to find out invites reading the two months as if they were the same one.
-   *
-   * Volume and quality are not lost: the stacked chart below is valid against
-   * invalid per month, and the valid lead rate has its own trend.
-   */
-  const cpl = val(acqCurrent, 'cpl');
-  const cpvl = val(acqCurrent, 'cpvl');
-  const cac = val(acqCurrent, 'cac');
+  const totalInvalid = n(current, 'total_invalid');
+  const totalLeads = n(current, 'total_leads');
+  const validRate = totalLeads > 0 ? (totalValid / totalLeads) * 100 : null;
+  const invalidRate = totalLeads > 0 ? (totalInvalid / totalLeads) * 100 : null;
 
   /** Valid against invalid, stacked, so the bar height is the month's volume
    *  and the split inside it is quality. Two separate bars would make you do
    *  that addition by eye. */
-  const trend = useMemo(() => ordered.slice(-12).map(r => ({
+  const trend = useMemo(() => ordered.slice(-TREND_MONTHS).map(r => ({
     key: String(r.month), label: monthLabel(r), rows: [r],
     values: { valid: n(r, 'total_valid'), invalid: n(r, 'total_invalid') },
-  })), [ordered]);
-
-  const rateTrend = useMemo(() => ordered.slice(-12).map(r => ({
-    key: String(r.month), label: monthLabel(r), rows: [r],
-    values: { rate: n(r, 'valid_rate_pct') },
   })), [ordered]);
 
   const mix = useMemo(() => CATEGORIES.map(c => ({
     key: c.name, value: n(current, `${c.key}_total`), count: 1, rows: [current!],
   })).filter(d => d.value > 0), [current]);
 
+  /**
+   * One series per category, per cost metric, across months.
+   *
+   * Three separate charts rather than one with nine series: CPL and CAC
+   * sit at different orders of magnitude — a CAC in the thousands beside a CPL
+   * in the hundreds flattens the CPL bars into the axis. Splitting them keeps
+   * each on a scale where a month-to-month move is visible.
+   */
+  const costSeries = (metric: 'cpl' | 'cac') =>
+    (orderedAcq ?? []).slice(-TREND_MONTHS).map(r => ({
+      key: String(r.month), label: monthLabel(r), rows: [r],
+      values: Object.fromEntries(CATEGORIES.map(c => [c.key, n(r, `${c.key}_${metric}`)])),
+    }));
+
+  const cplTrend = useMemo(() => costSeries('cpl'), [orderedAcq]);
+  const cacTrend = useMemo(() => costSeries('cac'), [orderedAcq]);
+
+  const catSeries = CATEGORIES.map((c, i) => ({
+    id: c.key, label: c.name, kind: 'bar' as const, colorIndex: i,
+  }));
+
   return (
     <>
       <section className="section">
         <SectionHeader title="Lead Performance" note={monthLabel(current!)} action={picker} />
 
+        {/* Counts and their shares. No cost here — the cost figures live per
+            category below, because that is where a budget decision gets made. */}
         <div className="grid grid--kpi">
-          <Kpi i={1} label="Total Valid Leads" value={formatInt(totalValid)}
+          <Kpi i={1} label="Total Leads" value={formatInt(totalLeads)}
+            delta={delta(totalLeads, n(previous, 'total_leads'))} good="up"
+            note="All leads received" />
+          <Kpi i={2} label="Valid Leads" value={formatInt(totalValid)}
             delta={delta(totalValid, n(previous, 'total_valid'))} good="up"
-            note="Qualified this month" />
-          {/* Blended across all three categories. An em dash means no spend
-              was recorded for the month — a zero would read as free. */}
-          <Kpi i={2} label="Cost Per Lead (CPL)"
-            value={cpl === null ? '—' : formatINR(cpl)}
-            delta={delta(cpl ?? 0, n(acqPrevious, 'cpl'))} good="down"
-            note="Blended, spend ÷ total leads" />
-          <Kpi i={3} label="Cost Per Valid Lead (CPVL)"
-            value={cpvl === null ? '—' : formatINR(cpvl)}
-            delta={delta(cpvl ?? 0, n(acqPrevious, 'cpvl'))} good="down"
-            note="Blended, spend ÷ valid leads" />
-          <Kpi i={4} label="Customer Acquisition Cost (CAC)"
-            value={cac === null ? '—' : formatINR(cac)}
-            delta={delta(cac ?? 0, n(acqPrevious, 'cac'))} good="down"
-            note="Blended, spend ÷ customers" />
+            note={validRate === null ? 'Qualified this month' : `${formatPct(validRate, 1)} of the month`} />
+          <Kpi i={3} label="Invalid Leads" value={formatInt(totalInvalid)}
+            delta={delta(totalInvalid, n(previous, 'total_invalid'))} good="down"
+            note={invalidRate === null ? 'Disqualified this month' : `${formatPct(invalidRate, 1)} of the month`} />
+          <Kpi i={4} label="Valid Rate" value={validRate === null ? '—' : formatPct(validRate, 1)}
+            delta={delta(validRate ?? 0, rateOf(previous))} good="up"
+            note="Share of leads worth working" />
         </div>
       </section>
 
@@ -197,6 +208,8 @@ function LeadView({ ordered, current, previous, acqCurrent, acqPrevious, picker,
             const invalid = n(current, `${c.key}_invalid`);
             const total = n(current, `${c.key}_total`);
             const rate = total > 0 ? (valid / total) * 100 : 0;
+            const cpl = val(acqCurrent, `${c.key}_cpl`);
+            const cac = val(acqCurrent, `${c.key}_cac`);
             return (
               <div key={c.key} className="mk__cat" role="button" tabIndex={0}
                 onClick={() => drill(`${c.name} leads`, 'marketing_leads', [current!])}>
@@ -207,10 +220,16 @@ function LeadView({ ordered, current, previous, acqCurrent, acqPrevious, picker,
                 <div className="mk__cat-bar">
                   <span style={{ width: `${Math.min(100, rate)}%` }} />
                 </div>
+                {/* Counts and costs together. An em dash means no spend was
+                    recorded for the month — a zero would read as free. */}
                 <dl className="mk__cat-rows">
+                  <div><dt>Total</dt><dd className="num">{formatInt(total)}</dd></div>
                   <div><dt>Valid</dt><dd className="num">{formatInt(valid)}</dd></div>
                   <div><dt>Invalid</dt><dd className="num">{formatInt(invalid)}</dd></div>
-                  <div><dt>Total</dt><dd className="num">{formatInt(total)}</dd></div>
+                  <div className="mk__cat-sep">
+                    <dt>CPL</dt><dd className="num">{cpl === null ? '—' : formatINR(cpl)}</dd>
+                  </div>
+                  <div><dt>CAC</dt><dd className="num">{cac === null ? '—' : formatINR(cac)}</dd></div>
                 </dl>
               </div>
             );
@@ -220,6 +239,7 @@ function LeadView({ ordered, current, previous, acqCurrent, acqPrevious, picker,
 
       <section className="section">
         <SectionHeader title="Analysis" />
+
         <div className="grid grid--split">
           <ChartFrame title="Valid against invalid" department="marketing" height={260}
             question="Is lead volume growing, and is the quality holding?"
@@ -242,13 +262,23 @@ function LeadView({ ordered, current, previous, acqCurrent, acqPrevious, picker,
         </div>
 
         <div style={{ marginTop: 'var(--s4)' }}>
-          <ChartFrame title="Valid lead rate over time" department="marketing" height={240}
-            question="Is qualification improving or slipping?"
-            isEmpty={rateTrend.length < 2}>
+          <ChartFrame title="Cost per lead by category" department="marketing" height={240}
+            question="Which line of business is getting dearer to reach?"
+            isEmpty={cplTrend.length < 1}>
             {h => (
-              <TrendChart height={h} data={rateTrend} valueFormat={v => formatPct(v, 1)}
-                series={[{ id: 'rate', label: 'Valid lead rate', kind: 'area', colorIndex: 1 }]}
-                onPointClick={p => drill(`Leads — ${p.label}`, 'marketing_leads', p.rows)} />
+              <TrendChart height={h} data={cplTrend} valueFormat={formatINR} series={catSeries}
+                onPointClick={p => drill(`Acquisition — ${p.label}`, 'marketing_acquisition', p.rows)} />
+            )}
+          </ChartFrame>
+        </div>
+
+        <div style={{ marginTop: 'var(--s4)' }}>
+          <ChartFrame title="Customer acquisition cost by category" department="marketing" height={240}
+            question="What does a paying customer cost in each line of business?"
+            isEmpty={cacTrend.length < 1}>
+            {h => (
+              <TrendChart height={h} data={cacTrend} valueFormat={formatINR} series={catSeries}
+                onPointClick={p => drill(`Acquisition — ${p.label}`, 'marketing_acquisition', p.rows)} />
             )}
           </ChartFrame>
         </div>
@@ -263,40 +293,15 @@ function LeadView({ ordered, current, previous, acqCurrent, acqPrevious, picker,
 
 function CostView({ ordered, current, previous, picker, drill }: ViewProps) {
   const spend = n(current, 'total_spend');
-  const cpl = val(current, 'cpl');
-  const cpvl = val(current, 'cpvl');
-  const cac = val(current, 'cac');
-  const l2c = val(current, 'l2c_rate');
+  const customers = n(current, 'total_customers');
 
-  /** The three blended cost curves on one axis. All rupees per something, so
-   *  they compare directly; CAC sitting well above the other two is the point
-   *  of the chart rather than a scaling problem. */
-  const costTrend = useMemo(() => ordered.slice(-12).map(r => ({
-    key: String(r.month), label: monthLabel(r), rows: [r],
-    values: { cpl: n(r, 'cpl'), cpvl: n(r, 'cpvl'), cac: n(r, 'cac') },
-  })), [ordered]);
-
-  const spendTrend = useMemo(() => ordered.slice(-12).map(r => ({
+  /** Spend per category per month. The cost ratios live on the lead view,
+   *  where the lead counts they divide by are also visible. */
+  const spendTrend = useMemo(() => ordered.slice(-TREND_MONTHS).map(r => ({
     key: String(r.month), label: monthLabel(r), rows: [r],
     values: Object.fromEntries(CATEGORIES.map(c => [c.key, n(r, `${c.key}_spend`)])),
   })), [ordered]);
 
-  /** Per-category CPL over time. This is the comparison the blended figures
-   *  cannot make, and the reason the three metrics are recorded per category
-   *  at all — B2B costing an order of magnitude more per lead than B2C is
-   *  invisible in a single blended line. */
-  const cplByCat = useMemo(() => ordered.slice(-12).map(r => ({
-    key: String(r.month), label: monthLabel(r), rows: [r],
-    values: Object.fromEntries(CATEGORIES.map(c => [c.key, n(r, `${c.key}_cpl`)])),
-  })), [ordered]);
-
-  const cacByCat = useMemo(() => CATEGORIES.map(c => ({
-    key: c.name, value: val(current, `${c.key}_cac`) ?? 0, count: 1, rows: [current!],
-  })), [current]);
-
-  /** Spend per category exists again now that it is back-computed from CPL x
-   *  leads, so the distribution is real rather than an allocation someone
-   *  chose. */
   const spendMix = useMemo(() => CATEGORIES.map(c => ({
     key: c.name, value: n(current, `${c.key}_spend`), count: 1, rows: [current!],
   })).filter(d => d.value > 0), [current]);
@@ -306,35 +311,19 @@ function CostView({ ordered, current, previous, picker, drill }: ViewProps) {
       <section className="section">
         <SectionHeader title="Acquisition & Cost" note={monthLabel(current!)} action={picker} />
 
-        <div className="grid grid--kpi mk__kpi5">
+        <div className="grid grid--kpi">
           <Kpi i={1} label="Total Marketing Spend" value={formatINRCompact(spend)}
             delta={delta(spend, n(previous, 'total_spend'))} good="neutral"
             note="All channels, all categories" />
-          <Kpi i={2} label="Cost Per Lead (CPL)"
-            value={cpl === null ? '—' : formatINR(cpl)}
-            delta={delta(cpl ?? 0, n(previous, 'cpl'))} good="down"
-            note="Blended, spend ÷ total leads" />
-          <Kpi i={3} label="Cost Per Valid Lead (CPVL)"
-            value={cpvl === null ? '—' : formatINR(cpvl)}
-            delta={delta(cpvl ?? 0, n(previous, 'cpvl'))} good="down"
-            note="Blended, spend ÷ valid leads" />
-          <Kpi i={4} label="Customer Acquisition Cost (CAC)"
-            value={cac === null ? '—' : formatINR(cac)}
-            delta={delta(cac ?? 0, n(previous, 'cac'))} good="down"
-            note="Blended, spend ÷ customers" />
-          <Kpi i={5} label="Lead to Customer Rate"
-            value={l2c === null ? '—' : formatPct(l2c, 1)}
-            delta={delta(l2c ?? 0, n(previous, 'l2c_rate'))} good="up"
-            note="Customers ÷ total leads" />
+          <Kpi i={2} label="Customers" value={formatInt(customers)}
+            delta={delta(customers, n(previous, 'total_customers'))} good="up"
+            note="Won this month" />
         </div>
 
-        {/* The five cards above blend all three categories; the cards below are
-            as entered. Saying which is which once, here, beats repeating a
-            caveat on each of eight tiles. */}
         <p className="mk__disclosure">
-          CPL, CPVL and CAC are recorded as entered for each category. Spend, customers and
-          the lead-to-customer rate are computed from them and the month's lead counts, so
-          the per-category figures always sum to the totals above.
+          Spend and customers are recorded as entered, per category. CPL and CAC are
+          computed from them and the month's lead counts, and are shown on the Lead
+          Performance view beside the counts they divide by.
         </p>
       </section>
 
@@ -342,27 +331,23 @@ function CostView({ ordered, current, previous, picker, drill }: ViewProps) {
         <SectionHeader title="By category" note={monthLabel(current!)} />
         <div className="mk__cats">
           {CATEGORIES.map(c => {
-            const cCpl = val(current, `${c.key}_cpl`);
-            const cCpvl = val(current, `${c.key}_cpvl`);
-            const cCac = val(current, `${c.key}_cac`);
-            const cL2c = val(current, `${c.key}_l2c`);
-            const leads = n(current, `${c.key}_total`);
+            const cSpend = n(current, `${c.key}_spend`);
+            const cCust = n(current, `${c.key}_customers`);
+            const share = spend > 0 ? (cSpend / spend) * 100 : 0;
             return (
               <div key={c.key} className="mk__cat" role="button" tabIndex={0}
                 onClick={() => drill(`${c.name} acquisition`, 'marketing_acquisition', [current!])}>
                 <div className="mk__cat-hd">
                   <span className="mk__cat-nm">{c.name}</span>
-                  <span className="mk__cat-rate num">{cCpl === null ? '—' : formatINR(cCpl)}</span>
+                  <span className="mk__cat-rate num">{formatPct(share, 1)}</span>
                 </div>
                 <div className="mk__cat-bar">
-                  <span style={{ width: `${Math.min(100, cL2c ?? 0)}%` }} />
+                  <span style={{ width: `${Math.min(100, share)}%` }} />
                 </div>
                 <dl className="mk__cat-rows">
-                  <div><dt>Leads</dt><dd className="num">{leads ? formatInt(leads) : '—'}</dd></div>
-                  <div><dt>CPL</dt><dd className="num">{cCpl === null ? '—' : formatINR(cCpl)}</dd></div>
-                  <div><dt>CPVL</dt><dd className="num">{cCpvl === null ? '—' : formatINR(cCpvl)}</dd></div>
-                  <div><dt>CAC</dt><dd className="num">{cCac === null ? '—' : formatINR(cCac)}</dd></div>
-                  <div><dt>L2C rate</dt><dd className="num">{cL2c === null ? '—' : formatPct(cL2c, 1)}</dd></div>
+                  <div><dt>Spend</dt><dd className="num">{cSpend ? formatINR(cSpend) : '—'}</dd></div>
+                  <div><dt>Customers</dt><dd className="num">{cCust ? formatInt(cCust) : '—'}</dd></div>
+                  <div><dt>Share of spend</dt><dd className="num">{formatPct(share, 1)}</dd></div>
                 </dl>
               </div>
             );
@@ -373,34 +358,6 @@ function CostView({ ordered, current, previous, picker, drill }: ViewProps) {
       <section className="section">
         <SectionHeader title="Analysis" />
         <div className="grid grid--split">
-          <ChartFrame title="Cost per lead by category" department="marketing" height={260}
-            question="Which line of business is getting dearer to reach?"
-            isEmpty={cplByCat.length < 2}>
-            {h => (
-              <TrendChart height={h} data={cplByCat} valueFormat={formatINR}
-                series={CATEGORIES.map((c, i) => ({
-                  id: c.key, label: c.name, kind: 'line' as const, colorIndex: i,
-                }))}
-                onPointClick={p => drill(`Acquisition — ${p.label}`, 'marketing_acquisition', p.rows)} />
-            )}
-          </ChartFrame>
-
-          <ChartFrame title="Blended cost trend" department="marketing" height={260}
-            question="Across everything, is a lead or a customer getting cheaper?"
-            isEmpty={costTrend.length < 2}>
-            {h => (
-              <TrendChart height={h} data={costTrend} valueFormat={formatINR}
-                series={[
-                  { id: 'cpl', label: 'CPL', kind: 'line', colorIndex: 1 },
-                  { id: 'cpvl', label: 'CPVL', kind: 'line', colorIndex: 0 },
-                  { id: 'cac', label: 'CAC', kind: 'line', colorIndex: 3 },
-                ]}
-                onPointClick={p => drill(`Acquisition — ${p.label}`, 'marketing_acquisition', p.rows)} />
-            )}
-          </ChartFrame>
-        </div>
-
-        <div className="grid grid--split" style={{ marginTop: 'var(--s4)' }}>
           <ChartFrame title="Cost distribution by category" department="marketing" height={240}
             question="Where is the budget actually going?"
             isEmpty={!spendMix.length}>
@@ -410,18 +367,6 @@ function CostView({ ordered, current, previous, picker, drill }: ViewProps) {
             )}
           </ChartFrame>
 
-          <ChartFrame title="Customer acquisition cost by category" department="marketing" height={240}
-            question="What does a customer cost in each line of business?"
-            isEmpty={!cacByCat.some(d => d.value > 0)}>
-            {h => (
-              <CategoryChart height={h} data={cacByCat} valueFormat={formatINR}
-                colorIndex={3}
-                onBarClick={s => drill(`${s.key} acquisition`, 'marketing_acquisition', s.rows)} />
-            )}
-          </ChartFrame>
-        </div>
-
-        <div style={{ marginTop: 'var(--s4)' }}>
           <ChartFrame title="Spend composition over time" department="marketing" height={240}
             question="Is the budget shifting between lines of business?"
             isEmpty={spendTrend.length < 2}>
@@ -445,15 +390,21 @@ function CostView({ ordered, current, previous, picker, drill }: ViewProps) {
 
 interface ViewProps {
   ordered: Row[];
+  /** Every acquisition month, for the cost charts on the lead view. */
+  orderedAcq?: Row[];
   current: Row | null;
   previous: Row | null;
-  /** The acquisition rows for the same months, when the lead view needs the
-   *  cost metrics. Absent on the cost view, which already reads them from
-   *  `current`. */
+  /** The acquisition row for the same month, when the lead view needs the
+   *  per-category cost figures. */
   acqCurrent?: Row | null;
-  acqPrevious?: Row | null;
   picker: React.ReactNode;
   drill: (title: string, datasetId: string, rows: Row[]) => void;
+}
+
+/** Valid rate for a month, for comparing one rate against another. */
+function rateOf(r: Row | null): number {
+  const total = n(r, 'total_leads');
+  return total > 0 ? (n(r, 'total_valid') / total) * 100 : 0;
 }
 
 /** Percentage movement against the previous month, or null when there is no
@@ -468,8 +419,8 @@ function delta(now: number, prev: number): number | null {
 function Kpi({ i, label, value, note, delta: d, good }: {
   i: number; label: string; value: string; note: string;
   delta: number | null;
-  /** Which direction counts as an improvement, for the delta colour. Cost
-   *  metrics falling is good news, so this cannot be inferred from the sign. */
+  /** Which direction counts as an improvement, for the delta colour. Invalid
+   *  leads falling is good news, so this cannot be inferred from the sign. */
   good: 'up' | 'down' | 'neutral';
 }) {
   const tone = d === null || good === 'neutral' || d === 0

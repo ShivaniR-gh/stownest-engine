@@ -335,12 +335,25 @@ const DERIVERS: Record<string, Deriver> = {
     let totalSpend = 0;
     let totalCustomers = 0;
 
+        /**
+     * Sheets is eventually consistent on read-after-write. The leads row is
+     * written moments before this runs, so the read above can return the
+     * month's PREVIOUS counts — and a customer check against a stale
+     * denominator refuses a save that is actually fine. The form sends the
+     * counts it just wrote; those win, and the sheet read is the fallback for
+     * an acquisition row saved on its own.
+     */
+    const fresh = (k: string, fallback: number) => {
+      const raw = String(values[k] ?? '').trim();
+      return raw === '' ? fallback : num(values[k]);
+    };
+
     for (const p of ['b2c', 'b2b', 'pm'] as const) {
       const spend = num(values[`${p}_spend`]);
       const customers = num(values[`${p}_customers`]);
-      const catLeads = num(lead[`${p}_total`]);
-      const catValid = num(lead[`${p}_valid`]);
-
+      const catLeads = fresh(`${p}_leads_now`, num(lead[`${p}_total`]));
+      const catValid = fresh(`${p}_valid_now`, num(lead[`${p}_valid`]));
+      
       if (spend < 0) {
         throw new HttpError(400, `${p.toUpperCase()} spend cannot be negative.`);
       }
@@ -353,8 +366,10 @@ const DERIVERS: Record<string, Deriver> = {
           `A customer has to have been a lead first.`);
       }
 
-      out[`${p}_cpl`] = per(spend, catLeads);
-      out[`${p}_cpvl`] = per(spend, catValid);
+      // Cost per lead, over VALID leads only. An unqualified lead cost money
+      // to acquire but was never a prospect, so dividing by every lead
+      // flatters the figure.
+      out[`${p}_cpl`] = per(spend, catValid);
       out[`${p}_cac`] = per(spend, customers);
       out[`${p}_l2c`] = pct(customers, catLeads);
 
@@ -362,8 +377,8 @@ const DERIVERS: Record<string, Deriver> = {
       totalCustomers += customers;
     }
 
-    const allLeads = num(lead.total_leads);
-    const allValid = num(lead.total_valid);
+    const allLeads = fresh('leads_now', num(lead.total_leads));
+    const allValid = fresh('valid_now', num(lead.total_valid));
 
     out.total_spend = String(Math.round(totalSpend));
     out.total_customers = String(totalCustomers);
@@ -371,8 +386,7 @@ const DERIVERS: Record<string, Deriver> = {
     out.leads_at_entry = String(allLeads);
     out.valid_at_entry = String(allValid);
 
-    out.cpl = per(totalSpend, allLeads);
-    out.cpvl = per(totalSpend, allValid);
+    out.cpl = per(totalSpend, allValid);
     out.cac = per(totalSpend, totalCustomers);
     out.l2c_rate = pct(totalCustomers, allLeads);
 

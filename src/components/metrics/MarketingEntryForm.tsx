@@ -134,8 +134,7 @@ export function MarketingEntryForm({ existing, onDone, onCancel }: {
       return {
         ...c, valid, invalid, total, spend, customers,
         validRate: total > 0 ? (valid / total) * 100 : null,
-        cpl: total > 0 && spend > 0 ? spend / total : null,
-        cpvl: valid > 0 && spend > 0 ? spend / valid : null,
+        cpl: valid > 0 && spend > 0 ? spend / valid : null,
         cac: customers > 0 && spend > 0 ? spend / customers : null,
         l2c: total > 0 && customers > 0 ? (customers / total) * 100 : null,
       };
@@ -150,11 +149,10 @@ export function MarketingEntryForm({ existing, onDone, onCancel }: {
     return {
       per, totalValid, totalInvalid, totalLeads, totalSpend, totalCustomers,
       validRate: totalLeads > 0 ? (totalValid / totalLeads) * 100 : null,
-      // Weighted by construction — total spend over total leads, never an
-      // average of the three CPLs. Averaging would treat a category bringing
-      // 226 leads as equal to one bringing 2,551.
-      cpl: totalLeads > 0 && totalSpend > 0 ? totalSpend / totalLeads : null,
-      cpvl: totalValid > 0 && totalSpend > 0 ? totalSpend / totalValid : null,
+      // Weighted by construction — total spend over total VALID leads, never
+      // an average of the three CPLs. Averaging would treat a category
+      // bringing 226 leads as equal to one bringing 2,551.
+      cpl: totalValid > 0 && totalSpend > 0 ? totalSpend / totalValid : null,
       cac: totalCustomers > 0 && totalSpend > 0 ? totalSpend / totalCustomers : null,
       l2c: totalLeads > 0 && totalCustomers > 0 ? (totalCustomers / totalLeads) * 100 : null,
     };
@@ -212,8 +210,16 @@ export function MarketingEntryForm({ existing, onDone, onCancel }: {
       // unavailable" downstream, not zero — a spend of ₹0 is a claim.
       acqPayload[`${c.key}_spend`] = has(f.spend) ? f.spend : '';
       acqPayload[`${c.key}_customers`] = has(f.customers) ? f.customers : '';
+      // Sent for the server's checks only — these keys are not columns, so
+      // they are dropped before the row reaches the sheet. Without them the
+      // deriver divides by whatever Sheets has caught up to, which on a month
+      // whose counts just changed is the old figure.
+      acqPayload[`${c.key}_leads_now`] = String(n(f.valid) + n(f.invalid));
+      acqPayload[`${c.key}_valid_now`] = f.valid || '0';
     }
 
+    acqPayload.leads_now = String(calc.totalLeads);
+    acqPayload.valid_now = String(calc.totalValid);
     try {
       // Leads first, always. The acquisition deriver reads this row for its
       // denominators, so the reverse order fails on a genuinely new month.
@@ -277,9 +283,7 @@ export function MarketingEntryForm({ existing, onDone, onCancel }: {
               <div><dt>Total leads</dt><dd className="num">{calc.totalLeads || '—'}</dd></div>
               <div><dt>Total spend</dt><dd className="num">{money(calc.totalSpend || null)}</dd></div>
               <div><dt>Blended CPL</dt><dd className="num">{money(calc.cpl)}</dd></div>
-              <div><dt>Blended CPVL</dt><dd className="num">{money(calc.cpvl)}</dd></div>
               <div><dt>Blended CAC</dt><dd className="num">{money(calc.cac)}</dd></div>
-              <div><dt>L2C rate</dt><dd className="num">{pctOf(calc.l2c)}</dd></div>
             </dl>
           </section>
 
@@ -301,9 +305,7 @@ export function MarketingEntryForm({ existing, onDone, onCancel }: {
                   <div><dt>Total leads</dt><dd className="num">{p.total || '—'}</dd></div>
                   <div><dt>Valid rate</dt><dd className="num">{pctOf(p.validRate)}</dd></div>
                   <div><dt>CPL</dt><dd className="num">{money(p.cpl)}</dd></div>
-                  <div><dt>CPVL</dt><dd className="num">{money(p.cpvl)}</dd></div>
                   <div><dt>CAC</dt><dd className="num">{money(p.cac)}</dd></div>
-                  <div><dt>L2C rate</dt><dd className="num">{pctOf(p.l2c)}</dd></div>
                 </dl>
               </section>
             );
@@ -331,8 +333,8 @@ export function MarketingEntryForm({ existing, onDone, onCancel }: {
 
           <p className="mk__note">
             Saves two rows: lead performance and acquisition cost for this month.
-            Leads, spend and customers are recorded as entered. CPL, CPVL, CAC and the
-            lead-to-customer rate are calculated from them.
+            Leads, spend and customers are recorded as entered. CPL and CAC are
+            calculated from them.
           </p>
 
           {problems.length > 0 && (

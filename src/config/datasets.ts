@@ -707,14 +707,7 @@ export const DATASETS: DatasetDef[] = [
       { key: 'pm_cpl', header: 'P&M CPL', type: 'currency', sheetColumn: 'P&M CPL',
         derived: true, role: 'cost' },
  
-      /* --- DERIVED: cost per valid lead = spend / valid leads --- */
-      { key: 'b2c_cpvl', header: 'B2C CPVL', type: 'currency', sheetColumn: 'B2C CPVL',
-        derived: true, role: 'cost' },
-      { key: 'b2b_cpvl', header: 'B2B CPVL', type: 'currency', sheetColumn: 'B2B CPVL',
-        derived: true, role: 'cost' },
-      { key: 'pm_cpvl', header: 'P&M CPVL', type: 'currency', sheetColumn: 'P&M CPVL',
-        derived: true, role: 'cost' },
- 
+    
       /* --- DERIVED: customer acquisition cost = spend / customers --- */
       { key: 'b2c_cac', header: 'B2C CAC', type: 'currency', sheetColumn: 'B2C CAC',
         derived: true, role: 'cost' },
@@ -737,7 +730,6 @@ export const DATASETS: DatasetDef[] = [
        * average of the three CPLs. A straight average would treat a category
        * bringing 226 leads as equal to one bringing 2,551. */
       { key: 'cpl', header: 'Blended CPL', type: 'currency', sheetColumn: 'Blended CPL', derived: true },
-      { key: 'cpvl', header: 'Blended CPVL', type: 'currency', sheetColumn: 'Blended CPVL', derived: true },
       { key: 'cac', header: 'Blended CAC', type: 'currency', sheetColumn: 'Blended CAC', derived: true },
       { key: 'l2c_rate', header: 'Lead to Customer Rate', type: 'percent',
         sheetColumn: 'Lead to Customer Rate', derived: true },
