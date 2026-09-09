@@ -287,12 +287,8 @@ const DERIVERS: Record<string, Deriver> = {
    *
    * Spend and customers are entered per category; every ratio below is
    * arithmetic over them and the month's lead counts:
-   *
-   *   CPL      = spend / total leads
-   *   CPVL     = spend / valid leads
-   *   CAC      = spend / customers
-   *   L2C rate = customers / total leads
-   *
+   *  CPL      = spend / valid leads
+   *  CAC      = spend / customers
    * Deriving rather than typing them is what keeps the row honest. A typed
    * CPL beside a typed spend can disagree, and nothing in the sheet would say
    * which was wrong; here the arithmetic only runs one way.

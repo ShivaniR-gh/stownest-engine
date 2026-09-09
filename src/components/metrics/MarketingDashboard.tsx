@@ -170,6 +170,7 @@ function LeadView({ ordered, orderedAcq, current, previous, acqCurrent, picker, 
       values: Object.fromEntries(CATEGORIES.map(c => [c.key, n(r, `${c.key}_${metric}`)])),
     }));
 
+  const cplTrend = useMemo(() => costSeries('cpl'), [orderedAcq]);
   const cacTrend = useMemo(() => costSeries('cac'), [orderedAcq]);
 
   const catSeries = CATEGORIES.map((c, i) => ({
@@ -260,19 +261,10 @@ function LeadView({ ordered, orderedAcq, current, previous, acqCurrent, picker, 
           </ChartFrame>
         </div>
 
-        <div style={{ marginTop: 'var(--s4)' }}>
-          <ChartFrame title="Customer acquisition cost over time" department="marketing" height={280}
-            question="Which line of business is getting dearer to win a customer in?"
-            isEmpty={cacTrend.length < 2}
-            emptyBody="Two months are needed before a trend means anything.">
-            {h => (
-              <TrendChart height={h} data={cacTrend} valueFormat={formatINR} series={catSeries}
-                onPointClick={p => drill(`Acquisition — ${p.label}`, 'marketing_acquisition', p.rows)} />
-            )}
-          </ChartFrame>
-        </div>
+        
       </section>
     </>
+    
   );
 }
 
