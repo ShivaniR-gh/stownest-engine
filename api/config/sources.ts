@@ -1,17 +1,17 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { authenticate } from '../_lib/auth';
-import { fail, ok } from '../_lib/respond';
-import { HttpError, required } from '../_lib/env';
+import { authenticate } from '../_lib/auth.js';
+import { fail, ok } from '../_lib/respond.js';
+import { HttpError, required } from '../_lib/env.js';
 import {
   appendKeyedRows, deleteRowsWhereFirstCol, ensureTab, listTabs, parseSpreadsheetId,
   rangeForSheet, readRange, resolveTab, spreadsheetTitle, audit,
-} from '../_lib/sheets';
+} from '../_lib/sheets.js';
 import {
   MAPPINGS_HEADERS, MAPPINGS_TAB, SOURCES_HEADERS, SOURCES_TAB,
   invalidateRegistry, listSources,
-} from '../_lib/registry';
-import { canManageDataSource } from '../../src/lib/permissions/policy';
-import { assertActiveDepartment, loadDepartments } from '../_lib/departments';
+} from '../_lib/registry.js';
+import { canManageDataSource } from '../../src/lib/permissions/policy.js';
+import { assertActiveDepartment, loadDepartments } from '../_lib/departments.js';
 
 /** ---------------------------------------------------------------------------
  * Data source connection.

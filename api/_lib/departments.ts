@@ -1,7 +1,7 @@
-import type { DepartmentDef } from '../../src/config/departments';
-import { SEED_DEPARTMENTS } from '../../src/config/departments';
-import { readRange } from './sheets';
-import { HttpError, required } from './env';
+import type { DepartmentDef } from '../../src/config/departments.js';
+import { SEED_DEPARTMENTS } from '../../src/config/departments.js';
+import { readRange } from './sheets.js';
+import { HttpError, required } from './env.js';
 
 /** ---------------------------------------------------------------------------
  * Runtime department registry.

@@ -1,10 +1,10 @@
 import { OAuth2Client } from 'google-auth-library';
 import type { VercelRequest } from '@vercel/node';
-import { principalFromRow, type Principal } from '../../src/lib/permissions/policy';
-import { getDataset } from '../../src/config/datasets';
-import { readDataset } from './sheets';
-import { HttpError, list, optional, required } from './env';
-import { knownDepartmentIds } from './departments';
+import { principalFromRow, type Principal } from '../../src/lib/permissions/policy.js';
+import { getDataset } from '../../src/config/datasets.js';
+import { readDataset } from './sheets.js';
+import { HttpError, list, optional, required } from './env.js';
+import { knownDepartmentIds } from './departments.js';
 
 /** ---------------------------------------------------------------------------
  * Request authentication.

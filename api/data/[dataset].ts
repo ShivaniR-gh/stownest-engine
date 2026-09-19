@@ -1,14 +1,14 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { authenticate } from '../_lib/auth';
-import { fail, ok } from '../_lib/respond';
-import { HttpError } from '../_lib/env';
-import { appendRow, audit, deleteRowByIndex, readDataset, updateRowByIndex } from '../_lib/sheets';
-import { getDatasetDef } from '../_lib/registry';
-import { allowedTabs, ensureTabWithSchema, resolveDestinationTab } from '../_lib/tabs';
-import { escapeForSheet, validateRecord } from '../_lib/validate';
-import { derive } from '../_lib/derive';
-import { can } from '../../src/lib/permissions/policy';
-import type { Action, DatasetDef, Row } from '../../src/config/types';
+import { authenticate } from '../_lib/auth.js';
+import { fail, ok } from '../_lib/respond.js';
+import { HttpError } from '../_lib/env.js';
+import { appendRow, audit, deleteRowByIndex, readDataset, updateRowByIndex } from '../_lib/sheets.js';
+import { getDatasetDef } from '../_lib/registry.js';
+import { allowedTabs, ensureTabWithSchema, resolveDestinationTab } from '../_lib/tabs.js';
+import { escapeForSheet, validateRecord } from '../_lib/validate.js';
+import { derive } from '../_lib/derive.js';
+import { can } from '../../src/lib/permissions/policy.js';
+import type { Action, DatasetDef, Row } from '../../src/config/types.js';
 
 /** ---------------------------------------------------------------------------
  * Dataset CRUD.

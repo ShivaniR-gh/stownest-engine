@@ -1,14 +1,14 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { authenticate } from '../_lib/auth';
-import { fail, ok } from '../_lib/respond';
-import { HttpError, required } from '../_lib/env';
-import { appendKeyedRows, deleteRowsWhereFirstCol, ensureTab, readRange, audit } from '../_lib/sheets';
+import { authenticate } from '../_lib/auth.js';
+import { fail, ok } from '../_lib/respond.js';
+import { HttpError, required } from '../_lib/env.js';
+import { appendKeyedRows, deleteRowsWhereFirstCol, ensureTab, readRange, audit } from '../_lib/sheets.js';
 import {
   DEPARTMENTS_HEADERS, DEPARTMENTS_TAB, ID_PATTERN,
   invalidateDepartments, loadDepartments,
-} from '../_lib/departments';
-import { listSources } from '../_lib/registry';
-import { canManageDepartments } from '../../src/lib/permissions/policy';
+} from '../_lib/departments.js';
+import { listSources } from '../_lib/registry.js';
+import { canManageDepartments } from '../../src/lib/permissions/policy.js';
 
 /** ---------------------------------------------------------------------------
  * Department management. Super admin only, enforced here rather than in the UI.

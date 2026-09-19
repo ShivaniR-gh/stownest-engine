@@ -1,6 +1,6 @@
 import { JWT } from 'google-auth-library';
-import type { DatasetDef, Row } from '../../src/config/types';
-import { HttpError, required } from './env';
+import type { DatasetDef, Row } from '../../src/config/types.js';
+import { HttpError, required } from './env.js';
 
 /** ---------------------------------------------------------------------------
  * Google Sheets access.

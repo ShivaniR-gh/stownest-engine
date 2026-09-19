@@ -1,4 +1,4 @@
-import type { ColumnDef, DatasetDef, Row } from '../../src/config/types';
+import type { ColumnDef, DatasetDef, Row } from '../../src/config/types.js';
 
 /** ---------------------------------------------------------------------------
  * Field validation, shared by the browser and the API.

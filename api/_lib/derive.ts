@@ -1,8 +1,8 @@
-import type { DatasetDef, Row } from '../../src/config/types';
-import type { Principal } from '../../src/lib/permissions/policy';
-import { HttpError } from './env';
-import { readDataset } from './sheets';
-import { getDatasetDef } from './registry';
+import type { DatasetDef, Row } from '../../src/config/types.js';
+import type { Principal } from '../../src/lib/permissions/policy.js';
+import { HttpError } from './env.js';
+import { readDataset } from './sheets.js';
+import { getDatasetDef } from './registry.js';
 
 /** ---------------------------------------------------------------------------
  * Server-side field derivation.

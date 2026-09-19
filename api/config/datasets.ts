@@ -1,8 +1,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { authenticate } from '../_lib/auth';
-import { fail, ok } from '../_lib/respond';
-import { invalidateRegistry, loadRegistry } from '../_lib/registry';
-import { can } from '../../src/lib/permissions/policy';
+import { authenticate } from '../_lib/auth.js';
+import { fail, ok } from '../_lib/respond.js';
+import { invalidateRegistry, loadRegistry } from '../_lib/registry.js';
+import { can } from '../../src/lib/permissions/policy.js';
 
 /**
  * The live dataset registry, already filtered to what this principal may read.

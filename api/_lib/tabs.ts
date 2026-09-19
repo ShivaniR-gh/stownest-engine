@@ -1,7 +1,7 @@
-import type { DatasetDef } from '../../src/config/types';
-import { HttpError } from './env';
-import { ensureTab, readRange, rangeForSheet, resolveTab, spreadsheetIdFor } from './sheets';
-import { monthTabOptions } from './months';
+import type { DatasetDef } from '../../src/config/types.js';
+import { HttpError } from './env.js';
+import { ensureTab, readRange, rangeForSheet, resolveTab, spreadsheetIdFor } from './sheets.js';
+import { monthTabOptions } from './months.js';
 
 /** ---------------------------------------------------------------------------
  * Where a record is written.

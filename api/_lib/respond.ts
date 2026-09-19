@@ -1,5 +1,5 @@
 import type { VercelResponse } from '@vercel/node';
-import { ConfigError, HttpError } from './env';
+import { ConfigError, HttpError } from './env.js';
 
 export function ok(res: VercelResponse, body: unknown, cacheSeconds = 0) {
   res.setHeader('Cache-Control', cacheSeconds ? `private, max-age=${cacheSeconds}` : 'no-store');

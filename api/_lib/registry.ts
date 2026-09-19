@@ -1,7 +1,7 @@
-import type { ColumnDef, ColumnType, DatasetDef, DepartmentId, SemanticRole } from '../../src/config/types';
-import { DATASETS as SEED } from '../../src/config/datasets';
-import { readRange } from './sheets';
-import { HttpError, required } from './env';
+import type { ColumnDef, ColumnType, DatasetDef, DepartmentId, SemanticRole } from '../../src/config/types.js';
+import { DATASETS as SEED } from '../../src/config/datasets.js';
+import { readRange } from './sheets.js';
+import { HttpError, required } from './env.js';
 
 /** ---------------------------------------------------------------------------
  * Runtime dataset registry.

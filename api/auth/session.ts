@@ -1,8 +1,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { authenticate } from '../_lib/auth';
-import { fail, ok } from '../_lib/respond';
-import { effectiveActions, visibleDepartments } from '../../src/lib/permissions/policy';
-import { loadDepartments } from '../_lib/departments';
+import { authenticate } from '../_lib/auth.js';
+import { fail, ok } from '../_lib/respond.js';
+import { effectiveActions, visibleDepartments } from '../../src/lib/permissions/policy.js';
+import { loadDepartments } from '../_lib/departments.js';
 
 /** Resolves the signed-in user to a Principal. The client renders from this;
  *  it does not decide it. */
