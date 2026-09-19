@@ -105,14 +105,16 @@
   --sh-md: 0 2px 4px rgba(20, 33, 61, .05), 0 8px 20px rgba(20, 33, 61, .05);
   --pop:   0 4px 10px rgba(20, 33, 61, .08), 0 16px 40px rgba(20, 33, 61, .14);
 
-  /* Dark navigation rail against a light canvas — the main hierarchy device */
-  --rail-bg:     #172554;
-  --rail-bg-alt: #1e3268;
-  --rail-ink:    #e2e8f0;
-  --rail-ink-dim:#94a3b8;
-  --rail-line:   #23346b;
-  --rail-active: #24397a;
-  --rail-dot:    #38bdf8;
+  /* Dark navigation rail against a light canvas — the main hierarchy device.
+     Deep navy so the rail belongs to the same family as the accent without
+     competing with it: the rail is a surface, the accent is a signal. */
+  --rail-bg:     #0f1e3d;
+  --rail-bg-alt: #182d53;
+  --rail-ink:    #e8eefb;
+  --rail-ink-dim:#94a6c8;
+  --rail-line:   #1c3159;
+  --rail-active: #1e3a6b;
+  --rail-dot:    #60a5fa;
 
   --rail-w: 244px;
   --rail-w-collapsed: 60px;
@@ -151,11 +153,11 @@
   --accent-ink:    #061021;
   --accent-bright: #3b82f6;
 
-  --pos: #10b981; --pos-soft: #0d2b23;
-  --warn: #f59e0b; --warn-soft: #33260f;
-  --neg: #ef4444; --neg-soft: #331717;
-  --signal: #f59e0b; --signal-soft: #33260f;
-  --purple: #8b5cf6; --purple-soft: #221a3a;
+  --pos: #34d399; --pos-soft: #0d2b23;
+  --warn: #fbbf24; --warn-soft: #33260f;
+  --neg: #f87171; --neg-soft: #331717;
+  --signal: #fbbf24; --signal-soft: #33260f;
+  --purple: #a78bfa; --purple-soft: #221a3a;
   --mint: #10b981; --mint-soft: #0d2b23; --mint-line: #17513f; --mint-hover: #34d399;
   --info: #3b82f6; --info-soft: #152744;
   --idle: #94a3bd; --idle-soft: #1b2436;
@@ -170,11 +172,11 @@
   --sh-md: 0 1px 3px rgba(0,0,0,.35), 0 4px 14px rgba(0,0,0,.3);
   --pop:   0 2px 8px rgba(0,0,0,.45), 0 16px 40px rgba(0,0,0,.5);
 
-  --rail-bg:     #0d1424;
-  --rail-bg-alt: #16203a;
-  --rail-ink:    #e2e8f0;
-  --rail-ink-dim:#8896ae;
-  --rail-line:   #1d2740;
-  --rail-active: #1b2b4d;
+  --rail-bg:     #0a1428;
+  --rail-bg-alt: #121f3c;
+  --rail-ink:    #e8eefb;
+  --rail-ink-dim:#8496b8;
+  --rail-line:   #16264a;
+  --rail-active: #1a3055;
   --rail-dot:    #3b82f6;
 }

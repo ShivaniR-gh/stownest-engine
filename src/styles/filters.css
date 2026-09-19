@@ -205,3 +205,12 @@
    sits right so it reads as an action on the view, not another tab. */
 .view-head__row { display: flex; align-items: center; flex-wrap: wrap; gap: var(--s3); width: 100%; }
 .view-head__row > .btn:last-child { margin-left: auto; }
+/* Field name shown inside an applied filter pill, so an active filter says
+   what it is filtering rather than just showing a bare value. Only rendered
+   when the control is off its default — the default option text already
+   names the field ("All cities", "All services"). */
+.filter-bar__name {
+  flex-shrink: 0;
+  font-weight: 600;
+  opacity: .8;
+}

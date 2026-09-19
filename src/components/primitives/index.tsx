@@ -128,11 +128,11 @@ export function Modal({ title, onClose, children, footer, size = 'md' }: {
 }
 
 /* -------------------------------- Tooltip -------------------------------- */
-export function Tooltip({ label, children }: { label: ReactNode; children: ReactNode }) {
+export function Tooltip({ label, children, fullWidth }: { label: ReactNode; children: ReactNode; fullWidth?: boolean }) {
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
   return (
     <span
-      style={{ display: 'inline-flex' }}
+      style={fullWidth ? { display: 'flex', width: '100%' } : { display: 'inline-flex' }}
       onMouseEnter={e => { const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); setPos({ x: r.left + r.width / 2, y: r.top - 8 }); }}
       onMouseLeave={() => setPos(null)}
     >

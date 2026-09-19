@@ -12,6 +12,7 @@ import { useAnalytics } from '@/lib/analytics/AnalyticsContext';
 import { exportRows } from '@/lib/export';
 import { usePermission } from '@/lib/permissions/usePermission';
 import { Gate } from '@/lib/permissions/Gate';
+import { isRowOpen } from '@/lib/data/editable';
 
 /**
  * A complete CRUD surface for one dataset: search, table, create, edit, delete,
@@ -62,6 +63,38 @@ export function DatasetPanel({ dataset, prefilter, month: monthProp, allowCreate
     return () => { cancelled = true; };
   }, [dataset.id, monthly, monthProp]);
 
+  /**
+   * Monthly datasets keep one tab per month, so a row has no `month` field and
+   * isRowOpen() would never match. The open month here is the newest tab that
+   * actually holds rows and is not in the future: walk the allowed tabs
+   * newest-first and stop at the first non-empty one. Usually one or two
+   * reads. Only that month can be edited or deleted; older months are closed.
+   *
+   * Future tabs are skipped rather than counted. A dataset may allow entering
+   * a month ahead, and one row typed into next month would otherwise close
+   * the month everyone is actually correcting.
+   */
+  const [openTab, setOpenTab] = useState<string>('');
+  useEffect(() => {
+    if (!monthly) { setOpenTab(''); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const { tabs = [] } = await adapter.list(dataset.id);
+        for (const tab of tabs) {            // server returns newest first
+          if (isFutureTab(tab)) continue;
+          if (cancelled) return;
+          try {
+            const r = await adapter.list(dataset.id, { tab });
+            if (r.rows.length > 0) { if (!cancelled) setOpenTab(tab); return; }
+          } catch { /* a tab that does not exist yet is simply empty */ }
+        }
+        if (!cancelled) setOpenTab('');
+      } catch { if (!cancelled) setOpenTab(''); }
+    })();
+    return () => { cancelled = true; };
+  }, [dataset.id, monthly]);
+
   // One cache entry per month, so switching months does not discard the other.
   const readId = monthly && month ? scopedId(dataset.id, month) : dataset.id;
 
@@ -86,6 +119,13 @@ export function DatasetPanel({ dataset, prefilter, month: monthProp, allowCreate
   }, [rows, q, dataset, prefilter]);
 
   const dept = dataset.department;
+  /** The record page needs the month tab as well as the id: for a monthly
+   *  dataset the row lives in that tab, not in the bare dataset. */
+  const recordHref = (r: Row) =>
+    `/d/${dept}/${dataset.id}/${encodeURIComponent(String(r.__id))}`
+    + (monthly && month ? `?tab=${encodeURIComponent(month)}` : '');
+
+  const rowOpen = (r: Row) => (monthly ? !!month && month === openTab : isRowOpen(r, all));
 
   const runDelete = async () => {
     if (!deleting) return;
@@ -115,7 +155,7 @@ export function DatasetPanel({ dataset, prefilter, month: monthProp, allowCreate
         error={error}
         emptyBody={diag.emptyReason ?? undefined}
         onSelectionChange={setSelection}
-        onRowClick={r => nav(`/d/${dept}/${dataset.id}/${encodeURIComponent(String(r.__id))}`)}
+        onRowClick={r => nav(recordHref(r))}
         toolbarLeft={
           <>
             {/* Which month's tab the table below is showing. */}
@@ -142,7 +182,10 @@ export function DatasetPanel({ dataset, prefilter, month: monthProp, allowCreate
         }
         toolbarRight={
           <>
-            {selection.length > 0 && can('DELETE', dept) && (
+            {/* Closed months are not deletable, so a mixed selection offers
+                no bulk delete rather than silently skipping rows. */}
+            {selection.length > 0 && can('DELETE', dept)
+              && selection.every(r => rowOpen(r)) && (
               <Button size="sm" variant="danger" icon="trash" onClick={() => setDeleting(selection)}>
                 Delete {selection.length}
               </Button>
@@ -169,15 +212,15 @@ export function DatasetPanel({ dataset, prefilter, month: monthProp, allowCreate
             )}>
               {close => (
                 <>
-                  <button className="pop__item" onClick={() => { close(); nav(`/d/${dept}/${dataset.id}/${encodeURIComponent(String(r.__id))}`); }}>
-                    <Icon name="external" size={13} /> Open record
+                  <button className="pop__item" onClick={() => { close(); nav(recordHref(r)); }}>
+                    <Icon name="external" size={13} /> View record
                   </button>
-                  {can('UPDATE', dept) && (
+                  {can('UPDATE', dept) && rowOpen(r) && (
                     <button className="pop__item" onClick={() => { close(); setEditing(r); }}>
                       <Icon name="edit" size={13} /> Edit
                     </button>
                   )}
-                  {can('DELETE', dept) && (
+                  {can('DELETE', dept) && rowOpen(r) && (
                     <>
                       <div className="pop__sep" />
                       <button className="pop__item pop__item--danger" onClick={() => { close(); setDeleting(r); }}>
@@ -238,4 +281,18 @@ export function DatasetPanel({ dataset, prefilter, month: monthProp, allowCreate
       )}
     </>
   );
+}
+
+/** "Readings OCT 2026" → is that month after the current one? Tab names come
+ *  from api/_lib/months.ts, so the three-letter month is reliable; anything
+ *  that does not parse is treated as not-future and handled as normal. */
+const MON = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN',
+  'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+function isFutureTab(tab: string): boolean {
+  const m = /([A-Z]{3})\s+(\d{4})$/.exec(tab.trim().toUpperCase());
+  if (!m) return false;
+  const i = MON.indexOf(m[1]);
+  if (i < 0) return false;
+  const now = new Date();
+  return new Date(Number(m[2]), i, 1) > new Date(now.getFullYear(), now.getMonth(), 1);
 }

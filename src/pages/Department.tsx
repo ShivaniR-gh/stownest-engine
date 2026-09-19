@@ -1,4 +1,4 @@
-import { useMemo, useState, type ComponentType } from 'react';
+import { useEffect, useMemo, useState, type ComponentType } from 'react';
 import { Navigate, useParams } from 'react-router-dom';
 import type { DepartmentId, Row } from '@/config/types';
 import { DEPT_BY_ID } from '@/config/departments';
@@ -24,11 +24,25 @@ import { useDatasets } from '@/lib/data/useDataset';
 import { useAnalytics } from '@/lib/analytics/AnalyticsContext';
 import { useDrill } from '@/lib/analytics/useDrill';
 import { applyFilters, applyPeriod } from '@/lib/analytics/filters';
-import { scopedId } from '@/lib/data/store';
+import { scopedId, latestFilledTab } from '@/lib/data/store';
+import {
+  isWindowId, windowCount, windowTabNames, tabMonthDate,
+  WINDOW_PRESETS, keysInWindow, ytdOptions, monthLabel,
+} from '@/lib/analytics/monthWindow';
+import { SelectField } from '@/components/filters/SelectField';
+import { parseDate } from '@/lib/format';
 import { usePermission } from '@/lib/permissions/usePermission';
 import { B2CReportView } from '@/components/data/B2CReportView';
 import { SalesEntryForm } from '@/components/metrics/SalesEntryForm';
+import { OperationsEntryForm } from '@/components/metrics/OperationsEntryForm';
+import { ControlTowerEntryForm } from '@/components/metrics/ControlTowerEntryForm';
+import { FinanceEntryForm } from '@/components/metrics/FinanceEntryForm';
+import { B2BEntryForm } from '@/components/metrics/B2BEntryForm';
+import { ControlTowerView } from '@/components/data/ControlTowerView';
+import { FinanceDashboard } from '@/components/metrics/FinanceDashboard';
+import { MarketingRecordsView } from '@/components/data/MarketingRecordsView';
 import { SalesCityView } from '@/components/data/SalesCityView';
+import { B2BMonthlyView } from '@/components/data/B2BMonthlyView';
 
 type View = 'dashboard' | 'records';
 
@@ -50,16 +64,21 @@ const ENTRY_FORMS: Record<string, ComponentType<{
   b2c_report: B2CReportEntryForm,
   marketing: MarketingEntryForm,
   sales: SalesEntryForm,
+  operations: OperationsEntryForm,
+  control_tower: ControlTowerEntryForm,
+  finance: FinanceEntryForm,
+  b2b: B2BEntryForm,
 };
 
 /** One segmented pill group. Three of these sit in the control bar. */
-function Segmented({ label, items, active, onPick }: {
+function Segmented({ label, items, active, onPick, allowSingle }: {
   label: string;
   items: { id: string; label: string; icon?: string; title?: string }[];
   active: string;
   onPick: (id: string) => void;
+  allowSingle?: boolean;
 }) {
-  if (items.length < 2) return null;
+  if (items.length === 0 || (!allowSingle && items.length < 2)) return null;
   return (
     <div className="view-toggle" role="tablist" aria-label={label}>
       {items.map(it => (
@@ -83,6 +102,28 @@ function Segmented({ label, items, active, onPick }: {
  * because the two get used for different jobs: a monthly review versus finding
  * one warehouse.
  */
+/** Month key (yyyy-mm) of a row's Month column. */
+const rowMonthKey = (r: Row) => {
+  const d = parseDate(r.month);
+  return d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` : '';
+};
+
+/**
+ * Row test for the Records month filter on single-sheet datasets (B2B).
+ * DatasetFilters cannot serve those — its month list comes from sheet tabs.
+ *
+ * Built from the FULL row list: a rolling window ("last 3 months") is relative
+ * to the months that exist, so a per-row test would call every row its own
+ * newest month and match them all.
+ */
+function monthTest(allRows: Row[], period: string): (r: Row) => boolean {
+  if (period === 'all') return () => true;
+  const keys = [...new Set(allRows.map(rowMonthKey).filter(Boolean))]
+    .sort((a, b) => b.localeCompare(a));
+  const keep = new Set(keysInWindow(keys, period));
+  return r => keep.has(rowMonthKey(r));
+}
+
 export default function Department() {
   const { deptId } = useParams<{ deptId: string }>();
   const dept = DEPT_BY_ID[deptId as DepartmentId];
@@ -103,6 +144,9 @@ export default function Department() {
   const [line, setLine] = useState<string>('');
   const [dashFilters, setDashFilters] = useState<ViewFilters>(EMPTY_FILTERS);
   const [recFilters, setRecFilters] = useState<ViewFilters>(EMPTY_FILTERS);
+  /** Records month filter for single-sheet datasets (B2B), which
+   *  DatasetFilters cannot serve — its month list comes from sheet tabs. */
+  const [recPeriod, setRecPeriod] = useState('all');
   /** Which sub-tab of the records table is open, for datasets that declare one. */
   const [subTab, setSubTab] = useState<string>('');
   /** Departments with a combined entry form open it from the view header,
@@ -113,7 +157,9 @@ export default function Department() {
 
   const allIds = useMemo(() => {
     if (!dept) return [];
-    return allDatasets().filter(d => d.department === dept.id).map(d => d.id);
+    return allDatasets()
+      .filter(d => d.department === dept.id || (d.alsoIn ?? []).includes(dept.id))
+      .map(d => d.id);
   }, [dept]);
 
   const lines = dept?.businessLines ?? [];
@@ -146,34 +192,101 @@ export default function Department() {
   const activeDataset = getDataset(datasetIds[activeTab] ?? '');
   const monthly = activeDataset?.tabStrategy === 'monthly';
 
+  /** Newest month tab that actually holds rows. Windows are anchored on it,
+   *  not on today: "Last 3 Months" should mean the last three months with
+   *  readings, not three calendar months that may all be empty. */
+  const [filledTab, setFilledTab] = useState('');
+  useEffect(() => {
+    if (!activeDataset || !monthly) { setFilledTab(''); return; }
+    let cancelled = false;
+    latestFilledTab(activeDataset.id)
+      .then(t => { if (!cancelled) setFilledTab(t); })
+      .catch(() => { /* falls back to the calendar anchor */ });
+    return () => { cancelled = true; };
+  }, [activeDataset, monthly]);
+  const anchor = tabMonthDate(filledTab) ?? undefined;
+
+  /** Capacity datasets measure a level, not a flow, so their filter offers
+   *  plain months only (see DatasetFilters). Their charts still need history,
+   *  so a fixed year ending at the chosen month is loaded behind the scenes. */
+  const snapshotDataset = !!activeDataset
+    && activeDataset.columns.some(c => c.key === 'occupied_space')
+    && activeDataset.columns.some(c => c.key === 'total_space');
+  const SNAPSHOT_HISTORY = 12;
+
+  const dashWindow = monthly && isWindowId(dashFilters.month);
+  const dashTabs = useMemo(() => {
+    if (!activeDataset || !monthly || !dashFilters.month) return [];
+    if (isWindowId(dashFilters.month)) {
+      return windowTabNames(
+        activeDataset.tabPrefix ?? activeDataset.sheetName,
+        windowCount(dashFilters.month),
+        anchor,
+      );
+    }
+    if (snapshotDataset) {
+      return windowTabNames(
+        activeDataset.tabPrefix ?? activeDataset.sheetName,
+        SNAPSHOT_HISTORY,
+        tabMonthDate(dashFilters.month) ?? anchor,
+      );
+    }
+    return [dashFilters.month];
+  }, [activeDataset, monthly, dashFilters.month, anchor, snapshotDataset]);
+
   // Each view reads its own month, so both are fetched and cached separately.
-  const dashId = activeDataset
-    ? (monthly && dashFilters.month ? scopedId(activeDataset.id, dashFilters.month) : activeDataset.id)
-    : '';
+  const dashIds = useMemo(() => {
+    if (!activeDataset) return [] as string[];
+    if (!monthly) return [activeDataset.id];
+    return dashTabs.map(t => scopedId(activeDataset.id, t));
+  }, [activeDataset, monthly, dashTabs]);
   // Falls back to the dashboard's month for the first render, before the
   // records bar has fetched its month list — otherwise the panel briefly
   // loads the unscoped dataset id.
-  const recMonth = recFilters.month || dashFilters.month;
+  const recMonth = (recFilters.month && !isWindowId(recFilters.month))
+    ? recFilters.month
+    : (dashWindow ? dashTabs[0] ?? '' : dashFilters.month);
   const recId = activeDataset
     ? (monthly && recMonth ? scopedId(activeDataset.id, recMonth) : activeDataset.id)
     : '';
 
   const loadIds = useMemo(
-    () => [...new Set([...datasetIds, dashId, recId].filter(Boolean))],
-    [datasetIds, dashId, recId]);
+    () => [...new Set([...datasetIds, ...dashIds, recId].filter(Boolean))],
+    [datasetIds, dashIds, recId]);
   const { byId } = useDatasets(loadIds);
 
   const scoped = useMemo(() => {
     const out: Record<string, ReturnType<typeof applyFilters>> = {};
     for (const id of loadIds) {
       const ds = getDataset(id);
-      out[id] = ds ? applyFilters(applyPeriod(byId[id] ?? [], ds, period), filters, ds) : [];
+      if (!ds) { out[id] = []; continue; }
+      /* A monthly tab IS the period. applyPeriod uses Recorded On against the
+         global analytics range (last 30 days etc) and drops July rows from the
+         July tab when they are dated July, leaving only August-dated leftovers. */
+      const raw = byId[id] ?? [];
+      const dated = (monthly || snapshotDataset) ? raw : applyPeriod(raw, ds, period);
+      out[id] = applyFilters(dated, filters, ds);
     }
     return out;
   }, [byId, loadIds, period, filters]);
 
+  /* Built once over the whole row list: a rolling window has to know which
+     months exist before it can decide which of them are the last three. */
+  const monthOk = useMemo(
+    () => monthTest(scoped[recId] ?? [], recPeriod),
+    [scoped, recId, recPeriod]);
+  /** Months present in the records rows, newest first — the Period options. */
+  const recMonthKeys = useMemo(
+    () => [...new Set((scoped[recId] ?? []).map(rowMonthKey).filter(Boolean))]
+      .sort((a, b) => b.localeCompare(a)),
+    [scoped, recId]);
+
   // Unfiltered rows feed the filter dropdowns; filtered rows feed the view.
-  const dashAll = activeDataset ? scoped[dashId] ?? [] : [];
+  const dashAll = useMemo(() => {
+    if (!activeDataset) return [];
+    if (!monthly) return scoped[activeDataset.id] ?? [];
+    return dashIds.flatMap(id => (scoped[id] ?? []).map(r => ({ ...r, _tab: id.split('::')[1] })));
+  }, [activeDataset, monthly, dashIds, scoped]);
   const dashRows = useMemo(() => applyViewFilters(dashAll, dashFilters), [dashAll, dashFilters]);
 
 
@@ -230,11 +343,26 @@ export default function Department() {
             ? undefined : `No ${l.id} data connected yet`,
         }))} />
 
-      <Segmented label="Dataset" active={datasetIds[activeTab] ?? ''}
-        onPick={id => setTab(datasetIds.indexOf(id))}
-        items={datasetIds.map(id => ({
-          id, label: getDataset(id)?.label ?? id, icon: getDataset(id)?.icon,
-        }))} />
+      {dept.id === 'b2b' ? (
+        <>
+          <Segmented label="Accounts" active={datasetIds[activeTab] ?? ''}
+            onPick={id => setTab(datasetIds.indexOf(id))}
+            items={datasetIds.filter(id => id !== 'b2b_sales').map(id => ({
+              id, label: getDataset(id)?.label ?? id, icon: getDataset(id)?.icon,
+            }))} />
+          <Segmented label="B2B Sales" allowSingle active={datasetIds[activeTab] ?? ''}
+            onPick={id => setTab(datasetIds.indexOf(id))}
+            items={datasetIds.filter(id => id === 'b2b_sales').map(id => ({
+              id, label: getDataset(id)?.label ?? id, icon: getDataset(id)?.icon,
+            }))} />
+        </>
+      ) : (
+        <Segmented label="Dataset" active={datasetIds[activeTab] ?? ''}
+          onPick={id => setTab(datasetIds.indexOf(id))}
+          items={datasetIds.map(id => ({
+            id, label: getDataset(id)?.label ?? id, icon: getDataset(id)?.icon,
+          }))} />
+      )}
     </div>
   );
 
@@ -245,18 +373,6 @@ export default function Department() {
         onRefresh={refresh} left={barLeft} />
 
       <div className="page">
-        {/* Only for datasets that name an entry form. A dataset flagged
-            combinedEntry with no form has no write surface at all, so gating
-            on the form resolving is what keeps this honest. */}
-        {EntryForm && (
-          <div className="view-head">
-            <div className="view-head__row">
-              <Button size="sm" variant="primary" icon="plus"
-                onClick={() => setEntering(true)}>New record</Button>
-            </div>
-          </div>
-        )}
-
         {(entering || editingRow) && EntryForm && (
           <EntryForm datasetId={activeDataset?.id} existing={editingRow}
             onCancel={() => { setEntering(false); setEditingRow(null); }}
@@ -272,7 +388,14 @@ export default function Department() {
             body={`Nothing is connected for ${activeLine} in ${dept.label}. Add a dataset with businessLine: '${activeLine}' to fill this tab.`} />
         ) : view === 'dashboard' ? (
           <>
-            {activeDataset && !dept.customDashboard && (
+            {/* Filters are hidden when a department's own dashboard is
+                driving the page — it owns its period/city controls. But a
+                capacity dataset is rendered by CapacityDashboard, not by the
+                custom dashboard, even inside a department that has one
+                (Operations' Warehouse Space is the case). That view needs the
+                standard filters, so the test follows what is actually
+                rendering below rather than what the department owns. */}
+            {activeDataset && (!dept.customDashboard || schema?.hasUtilisation) && (
               <DatasetFilters dataset={activeDataset} rows={dashAll}
                 value={dashFilters} onChange={setDashFilters} />
             )}
@@ -281,7 +404,13 @@ export default function Department() {
                 "Key figures" section is only shown for datasets it cannot
                 handle — otherwise the same five cards appeared twice. */}
             {activeDataset && schema?.hasUtilisation ? (
-              <CapacityDashboard ds={activeDataset} rows={dashRows} schema={schema} />
+              <CapacityDashboard ds={activeDataset} rows={dashRows} schema={schema}
+                focusMonth={dashFilters.month}
+                snapshotRows={
+                  monthly && dashFilters.month && !isWindowId(dashFilters.month)
+                    ? (scoped[scopedId(activeDataset.id, dashFilters.month)] ?? [])
+                    : undefined
+                } />
             ) : (
               <>
                 {/* A department with its own dashboard already shows its
@@ -294,8 +423,12 @@ export default function Department() {
                       onDrill={drill.openMetric} />
                   </section>
                 )}
+                {/* A custom dashboard brings its own section headers ("Key
+                    figures", "Analysis", ...), so this outer one would stack a
+                    second heading directly on top of the first with nothing
+                    between them. Only the generic path needs it. */}
                 <section className="section">
-                  <SectionHeader title="Analysis" />
+                  {!dept.customDashboard && <SectionHeader title="Analysis" />}
                   <DepartmentCharts department={dept.id}
                     ctx={{ rows: scoped, period, activeDatasetId: activeDataset?.id ?? '',
                           drill: (t, d, r) => drill.openRows(t, d, r) }} />
@@ -306,7 +439,19 @@ export default function Department() {
         ) : (
           activeDataset && (
             <section className="section">
-              <SectionHeader title="Records" />
+              {/* Actions sit in the header's action slot rather than a
+                  .view-head row of their own — that row cost a full band of
+                  vertical space above the heading for one button. Still gated
+                  on the entry form resolving: a combinedEntry dataset with no
+                  form has no write surface at all. */}
+              <SectionHeader title="Records" action={EntryForm ? (
+                <span style={{ display: 'flex', gap: 8 }}>
+                  {activeDataset?.id !== 'b2b_summary' && (
+                    <Button size="sm" variant="primary" icon="plus"
+                      onClick={() => { setEditingRow(null); setEntering(true); }}>New record</Button>
+                  )}
+                </span>
+              ) : undefined} />
 
               {subTabs.length > 1 && (
                 <div className="subtabs" role="tablist" aria-label={subTabCol?.header ?? 'View'}>
@@ -318,27 +463,55 @@ export default function Department() {
                 </div>
               )}
 
-              {monthly && (
+              {monthly && activeDataset.department !== 'control_tower' && (
                 <DatasetFilters dataset={activeDataset} rows={scoped[recId] ?? []}
-                
                   value={recFilters} onChange={setRecFilters} />
-                  
+              )}
+              {/* Single-sheet datasets with a Month column (B2B, Operations)
+                  get the Period filter here: DatasetFilters cannot serve them,
+                  since its month list comes from sheet tabs. b2b_summary and
+                  the custom views render their own. */}
+              {!monthly && activeDataset.id !== 'b2b_summary'
+                && !['sales', 'finance', 'control_tower', 'marketing', 'collections'].includes(activeDataset.department)
+                && activeDataset.entryForm !== 'b2c_report'
+                && !activeDataset.transposable
+                && activeDataset.columns.some(c => c.key === 'month') && (
+                <div className="filter-bar">
+                  <SelectField icon="calendar" label="Period" value={recPeriod}
+                    onChange={setRecPeriod} isOn={recPeriod !== 'all'}
+                    options={[
+                      { value: 'all', label: 'All months' },
+                      ...WINDOW_PRESETS.map(p => ({ value: p.id, label: p.label })),
+                      ...ytdOptions(recMonthKeys).map(y => ({ value: y.id, label: y.label })),
+                      ...recMonthKeys.map(k => ({ value: k, label: monthLabel(`${k}-01`) })),
+                    ]} />
+                </div>
               )}
                             {/* Sales and the B2C report each render their own table; the
                   generic panel would show fifty columns scrolling sideways. */}
-              {activeDataset.department === 'sales' ? (
-                <SalesCityView rows={scoped[recId] ?? []}
+              {activeDataset.id === 'b2b_summary' ? (
+                <B2BMonthlyView rows={scoped} />
+              ) : activeDataset.department === 'sales' ? (
+                <SalesCityView rows={scoped[recId] ?? []} datasetId={activeDataset.id}
                   label={activeDataset.label} onEdit={setEditingRow} />
               ) : activeDataset.entryForm === 'b2c_report' ? (
                 <B2CReportView rows={scoped[recId] ?? []} onEdit={setEditingRow} />
-              
+              ) : activeDataset.department === 'control_tower' ? (
+                <ControlTowerView rows={scoped[recId] ?? []}
+                  datasetId={activeDataset.id} onEdit={setEditingRow} />
+              ) : activeDataset.department === 'finance' ? (
+                <FinanceDashboard rows={scoped} mode="records" onEdit={setEditingRow} />
+              ) : activeDataset.department === 'marketing' ? (
+                <MarketingRecordsView rows={scoped[recId] ?? []}
+                  datasetId={activeDataset.id} onEdit={setEditingRow} />
               ) : activeDataset.transposable ? (
-                <div className="card"><div className="card__bd">
-                  <CollectionsMatrix
-                    monthlyDs={activeDataset}
-                    monthly={scoped[recId] ?? []}
-                    onEdit={setEditingRow} />
-                </div></div>
+                /* No card wrapper here: CollectionsMatrix renders its own,
+                   around the table only, so its period filter can sit above
+                   the card instead of inside a body that is padding:0. */
+                <CollectionsMatrix
+                  monthlyDs={activeDataset}
+                  monthly={scoped[recId] ?? []}
+                  onEdit={setEditingRow} />
               ) : (
               <DatasetPanel
                 key={`${activeDataset.id}:${recMonth}:${activeSubTab}`}
@@ -347,6 +520,7 @@ export default function Department() {
                 month={monthly ? String(recMonth) : undefined}
                 prefilter={r =>
                   applyViewFilters([r], recFilters).length > 0
+                  && monthOk(r)
                   && (!activeSubTab || !subTabCol
                       || String(r[subTabCol.key] ?? '').trim() === activeSubTab)}
               />

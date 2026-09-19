@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Icon, Tooltip } from '@/components/primitives';
 import { Sparkline } from '@/components/charts/Sparkline';
+import { iconForLabel } from '@/lib/ui/metricIcon';
 import type { ResolvedMetric } from '@/lib/analytics/resolveMetric';
 
 /**
@@ -16,15 +17,11 @@ import type { ResolvedMetric } from '@/lib/analytics/resolveMetric';
  * number in a management review can check it in one click without leaving the
  * screen or asking an engineer.
  */
-/** Icon chosen from what the metric IS, so it stays correct for any dataset. */
+/** Icon comes from the shared rule set so this grid and the hand-built
+ *  department dashboards agree on what each metric looks like. */
 function iconFor(m: ResolvedMetric): string {
   if (m.status !== 'ok') return 'info';
-  switch (m.def.format) {
-    case 'inr': case 'inr_compact': return 'ledger';
-    case 'pct': case 'pp': return 'chart';
-    case 'days': return 'clock';
-    default: return 'layers';
-  }
+  return iconForLabel(`${m.def.id} ${m.def.label}`);
 }
 
 /** Tone derives from the metric's own state — never picked for decoration. */
@@ -56,16 +53,18 @@ export function MetricCard({
     ? Math.max(0, Math.min(100, m.value)) : null;
 
   return (
-    <div className={`metric${clickable ? ' metric--clickable' : ''}${lead ? ' metric--lead' : ''}`}
+    <div className={`metric kpi2${clickable ? ' metric--clickable' : ''}${lead ? ' metric--lead' : ''}`}
       data-tone={tone === 'none' ? undefined : tone}
       onClick={clickable && !showProv ? onDrill : undefined}
       role={clickable ? 'button' : undefined}
       tabIndex={clickable ? 0 : undefined}
       onKeyDown={e => { if (e.key === 'Enter' && clickable) onDrill?.(); }}>
 
-      <div className="metric__hd">
-        <span className="metric__icon"><Icon name={iconFor(m)} size={14} /></span>
-        <span className="metric__label" title={m.def.label}>{m.def.label}</span>
+      <div className="metric__hd kpi2__hd">
+        <span className={`metric__icon kpi2__chip${tone === 'neg' ? ' kpi2__chip--neg' : ''}`}>
+          <Icon name={iconFor(m)} size={15} />
+        </span>
+        <span className="metric__label">{m.def.label}</span>
         {m.def.unit && <span className="eyebrow" style={{ fontSize: 9.5 }}>{m.def.unit}</span>}
         <button className="metric__fx" aria-expanded={showProv}
           aria-label={`How ${m.def.label} is calculated`}
@@ -157,7 +156,7 @@ export function MetricGrid({ metrics, sparks, onDrill, compare, size, emphasiseF
 }) {
   const leadId = emphasiseFirst ? metrics.find(m => m.status === 'ok')?.def.id : undefined;
   return (
-    <div className="grid grid--kpi">
+    <div className="grid grid--kpi grid--kpi-std">
       {metrics.map(m => (
         <MetricCard key={m.def.id} m={m} spark={sparks?.[m.def.id]} compare={compare} size={size}
           lead={m.def.id === leadId}

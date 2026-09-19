@@ -24,6 +24,15 @@ export interface DepartmentDef {
 
 const SEED: DepartmentDef[] = [
   {
+    id: 'b2b',
+    label: 'B2B',
+    purpose: 'City occupancy, moves and rental / transaction / logistics revenue.',
+    icon: 'trending',
+    metrics: [],
+    inWorkspace: true,
+    customDashboard: true,
+  },
+  {
     id: 'sales',
     label: 'Sales',
     purpose: 'Lead flow, qualification and conversion into paying customers.',
@@ -34,7 +43,6 @@ const SEED: DepartmentDef[] = [
     businessLines: [
       { id: 'Storage', icon: 'box' },
       { id: 'Moving', icon: 'truck' },
-      { id: 'Business', icon: 'trending' },
     ],
   },
   {
@@ -56,27 +64,33 @@ const SEED: DepartmentDef[] = [
   {
     id: 'operations',
     label: 'Operations',
-    purpose: 'Day-to-day task execution, completion and delay management.',
+    purpose: 'Deliveries, pick-ups and inter-state movement by city, month by month.',
     icon: 'checklist',
+    // Empty for the same reason collections and marketing are: the department
+    // renders its own dashboard, and deriveKpis would guess a second set of
+    // cards from the same columns and print every figure twice.
     metrics: [],
     inWorkspace: true,
+    customDashboard: true,
   },
   {
     id: 'control_tower',
     label: 'Control Tower',
-    purpose: 'Live exceptions across every department that need a decision today.',
+    purpose: 'Monthly B2C rental, city gap, reviews, tickets and call desk.',
     icon: 'radar',
     metrics: [],
     inWorkspace: true,
+    customDashboard: true,
   },
   {
     id: 'collections',
-    label: 'Collections',
+    label: 'Collections (B2C)',
     purpose: 'Receivables, ageing and recovery against issued invoices.',
     icon: 'receipt',
     metrics: [],
     inWorkspace: true,
-    businessLines: [{ id: 'B2C', icon: 'users' }, { id: 'B2B', icon: 'chart' }],
+    /* No business-line tabs: every collections dataset is tagged B2C, so a
+       B2B tab led to an empty view. The scope is in the label instead. */
     customDashboard: true,
   },
   {
@@ -94,10 +108,11 @@ const SEED: DepartmentDef[] = [
   {
     id: 'finance',
     label: 'Finance',
-    purpose: 'Revenue recognised, expenses booked and resulting profit.',
+    purpose: 'Monthly P&L — revenue, COGS, indirects, tax and profit.',
     icon: 'ledger',
     metrics: [],
     inWorkspace: true,
+    customDashboard: true,
   },
   {
     id: 'administration',

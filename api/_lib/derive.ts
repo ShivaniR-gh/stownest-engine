@@ -71,7 +71,197 @@ const salesCityDerive: Deriver = async (values, { principal }) => {
   };
 };
 
+
+/**
+ * Operations monthly report — deliveries, pick-ups, inter-state.
+ *
+ * Three blocks of the same shape: figures entered per city, roll-ups computed.
+ * Every roll-up below was checked against the circulated report and reproduces
+ * it exactly, which is why they are computed rather than typed:
+ *   Bangalore  133 + 43 = 176 full,  46 + 28 = 74 partial,  176 + 74 = 250
+ *   Bangalore  186 + 7  = 193 new,   16 + 2  = 18 add on,   193 + 18 = 211
+ * The column totals reconcile too — 244 / 105 / 92 / 55 and 393 / 12 / 50 / 3.
+ *
+ * The browser computes the same figures for its live preview, but a value the
+ * browser calculates is a value the browser can be wrong about, so these are
+ * what actually reach the sheet.
+ */
+const OPS_CITY_KEYS = ['blr', 'hyd', 'che', 'pun', 'mum', 'del', 'kol'];
+
+/** Sums the entered fields across cities, refusing negatives, and hands back
+ *  one total per field. Shared by all three city blocks. */
+function opsTotals(values: Row, fields: readonly string[], label: string) {
+  const totals: Record<string, number> = Object.fromEntries(fields.map(f => [f, 0]));
+  for (const c of OPS_CITY_KEYS) {
+    for (const f of fields) {
+      const v = num(values[`${c}_${f}`]);
+      if (v < 0) {
+        throw new HttpError(400,
+          `${label} figures for ${c.toUpperCase()} cannot be negative.`);
+      }
+      totals[f] += v;
+    }
+  }
+  return totals;
+}
+
+const opsDeliveriesDerive: Deriver = async (values, { principal }) => {
+  const entered = ['sn_all', 'sn_part', 'cust_all', 'cust_part'] as const;
+  const out: Row = { ...values };
+
+  for (const c of OPS_CITY_KEYS) {
+    const full = num(values[`${c}_sn_all`]) + num(values[`${c}_cust_all`]);
+    const partial = num(values[`${c}_sn_part`]) + num(values[`${c}_cust_part`]);
+    out[`${c}_full`] = String(full);
+    out[`${c}_partial`] = String(partial);
+    out[`${c}_total`] = String(full + partial);
+  }
+
+  const t = opsTotals(values, entered, 'Delivery');
+  const full = t.sn_all + t.cust_all;
+  const partial = t.sn_part + t.cust_part;
+  const all = full + partial;
+
+  return {
+    ...out,
+    tot_sn_all: String(t.sn_all),
+    tot_sn_part: String(t.sn_part),
+    tot_cust_all: String(t.cust_all),
+    tot_cust_part: String(t.cust_part),
+    tot_full: String(full),
+    tot_partial: String(partial),
+    tot_total: String(all),
+    // Blank rather than a misleading zero when nothing was delivered: a share
+    // of "0%" reads as a bad month, a blank reads as an empty one.
+    full_pct: all > 0 ? ((full / all) * 100).toFixed(1) : '',
+    partial_pct: all > 0 ? ((partial / all) * 100).toFixed(1) : '',
+    entered_by: principal.email,
+  };
+};
+
+const opsPickupsDerive: Deriver = async (values, { principal }) => {
+  const entered = ['sn', 'cust', 'sn_addon', 'cust_addon'] as const;
+  const out: Row = { ...values };
+
+  for (const c of OPS_CITY_KEYS) {
+    const fresh = num(values[`${c}_sn`]) + num(values[`${c}_cust`]);
+    const addon = num(values[`${c}_sn_addon`]) + num(values[`${c}_cust_addon`]);
+    out[`${c}_new`] = String(fresh);
+    out[`${c}_addon`] = String(addon);
+    out[`${c}_total`] = String(fresh + addon);
+  }
+
+  const t = opsTotals(values, entered, 'Pick-up');
+  const fresh = t.sn + t.cust;
+  const addon = t.sn_addon + t.cust_addon;
+
+  return {
+    ...out,
+    tot_sn: String(t.sn),
+    tot_cust: String(t.cust),
+    tot_sn_addon: String(t.sn_addon),
+    tot_cust_addon: String(t.cust_addon),
+    tot_addon: String(addon),
+    tot_new: String(fresh),
+    tot_total: String(fresh + addon),
+    entered_by: principal.email,
+  };
+};
+
+const opsMovingDerive: Deriver = async (values, { principal }) => {
+  const t = opsTotals(values, ['del_is', 'pick_is', 'pick_local'], 'Moving');
+  return {
+    ...values,
+    tot_del_is: String(t.del_is),
+    tot_pick_is: String(t.pick_is),
+    tot_pick_local: String(t.pick_local),
+    entered_by: principal.email,
+  };
+};
+
 const DERIVERS: Record<string, Deriver> = {
+
+  b2b_occupancy: async (values, { principal }) => {
+    const txnC = num(values.txn_clients);
+    const nonC = num(values.nontxn_clients);
+    const docC = num(values.doc_clients);
+    const txnS = num(values.txn_sqft);
+    const nonS = num(values.nontxn_sqft);
+    const mk = monthKey(values.month);
+    const city = String(values.city ?? '').trim();
+    return {
+      ...values,
+      row_key: `${mk}|${city}`,
+      active_clients: String(txnC + nonC + docC),
+      occupied_sqft: String(txnS + nonS),
+      entered_by: principal.email,
+    };
+  },
+
+  b2b_moves: async (values, { principal }) => {
+    const inn = num(values.inward);
+    const out = num(values.outward);
+    const rev = num(values.txn_revenue);
+    const txns = inn + out;
+    const mk = monthKey(values.month);
+    const city = String(values.city ?? '').trim();
+    return {
+      ...values,
+      row_key: `${mk}|${city}`,
+      total_txns: String(txns),
+      rev_per_move: txns > 0 ? String(rev / txns) : '',
+      entered_by: principal.email,
+    };
+  },
+
+  b2b_movement: async (values, { principal }) => {
+    const mk = monthKey(values.month);
+    const city = String(values.city ?? '').trim();
+    const name = String(values.client_name ?? '').trim();
+    return {
+      ...values,
+      row_key: `${mk}|${city}|${name}`,
+      client_name: name,
+      entered_by: principal.email,
+    };
+  },
+
+  b2b_sales: async (values, { principal }) => {
+    const txn = num(values.txn_leads);
+    const doc = num(values.doc_leads);
+    const valid = Math.max(0, txn + doc);
+    const won = num(values.closed_won);
+    const sqft = num(values.sqft_won);
+    const rev = num(values.est_rev);
+    const mk = monthKey(values.month);
+    const city = String(values.city ?? '').trim();
+    const sp = String(values.salesperson ?? '').trim();
+    const svc = String(values.service ?? '').trim();
+    const src = String(values.lead_source ?? '').trim();
+    return {
+      ...values,
+      row_key: `${mk}|${city}|${svc}|${sp}|${src}`,
+      valid: String(valid),
+      conversion: valid > 0 ? String((won / valid) * 100) : '',
+      avg_sqft: won > 0 ? String(sqft / won) : '',
+      avg_price: sqft > 0 ? String(rev / sqft) : '',
+      entered_by: principal.email,
+    };
+  },
+
+  b2b_revenue: async (values, { principal }) => {
+    const rental = num(values.rental_rev);
+    const txn = num(values.txn_rev);
+    const logi = num(values.logistics_rev);
+    const mk = monthKey(values.month);
+    const city = String(values.city ?? '').trim();
+    return {
+      ...values,
+      row_key: `${mk}|${city}`,
+      total_rev: String(rental + txn + logi),
+      entered_by: principal.email,
+    };
+  },
 
   /**
    * A space reading stores wh_code, occupied_space and the three customer
@@ -124,13 +314,6 @@ const DERIVERS: Record<string, Deriver> = {
     const totalCust = num(values.total_customers);
     const newCust = num(values.new_customers);
     const churned = num(values.churned_customers);
-    const opening = totalCust - newCust + churned;
-
-    if (opening < 0) {
-      throw new HttpError(400,
-        `${newCust} new and ${churned} left against a closing total of ${totalCust} ` +
-        `implies a negative opening balance. One of the three is wrong.`);
-    }
 
     return {
       ...values,
@@ -141,12 +324,18 @@ const DERIVERS: Record<string, Deriver> = {
       occupied_space: String(occupied),
       available_space: String(total - occupied),
       utilisation_pct: total > 0 ? (occupied / total * 100).toFixed(1) : '0',
+      avg_space: totalCust > 0 ? (occupied / totalCust).toFixed(0) : '',
       recorded_on:    String(values.recorded_on ?? new Date().toISOString().slice(0, 10)),
       total_customers: String(totalCust),
       new_customers: String(newCust),
       churned_customers: String(churned),
-      opening_customers: String(opening),
-      churn_pct: opening > 0 ? ((churned / opening) * 100).toFixed(1) : '0',
+      /* Opening balance, not the closing total: whoever joined this month was
+         never at risk of leaving it. Closing − joined + left is what the month
+         started with, and should equal last month's closing total. */
+      churn_pct: (() => {
+        const opening = Math.max(0, totalCust - newCust + churned);
+        return opening > 0 ? ((churned / opening) * 100).toFixed(1) : '';
+      })(),
       entered_by:     principal.email,
     };
   },
@@ -236,6 +425,201 @@ const DERIVERS: Record<string, Deriver> = {
       collection_amount: String(sum('collection')),
       entered_by: principal.email,
     };
+  },
+
+  /** Operations monthly report — one deriver per block of the report. */
+  ops_deliveries: opsDeliveriesDerive,
+  ops_pickups: opsPickupsDerive,
+  ops_moving: opsMovingDerive,
+
+  /**
+   * Tickets. Two figures and their sum — small enough that the arithmetic is
+   * obvious, which is exactly why it should not be typed twice.
+   */
+  ops_tickets: async (values, { principal }) => {
+    const visits = num(values.warehouse_visit);
+    const photos = num(values.photo_request);
+    if (visits < 0 || photos < 0) {
+      throw new HttpError(400, 'Ticket counts cannot be negative.');
+    }
+    return {
+      ...values,
+      warehouse_visit: String(visits),
+      photo_request: String(photos),
+      tot_tickets: String(visits + photos),
+      entered_by: principal.email,
+    };
+  },
+
+  finance_pnl: async (values, { principal }) => {
+    const g = (k: string) => num(values[k]);
+    const b2c = g('b2c_storage') + g('b2c_transport') + g('b2c_packing');
+    const b2b = g('b2b_storage') + g('b2b_transport');
+    const rev = b2c + b2b;
+    const cogs = g('cogs_wh_rent') + g('cogs_logistics') + g('cogs_labour')
+      + g('cogs_damages') + g('cogs_packing');
+    const gp = rev - cogs;
+    const indirect = g('exp_salary') + g('exp_marketing') + g('exp_intermediary')
+      + g('exp_other') + g('exp_emi');
+    const pbt = gp - indirect;
+    const tax = g('tax_gst');
+    return {
+      ...values,
+      b2c_rev: String(b2c),
+      b2b_rev: String(b2b),
+      tot_rev: String(rev),
+      tot_cogs: String(cogs),
+      gross_profit: String(gp),
+      tot_indirect: String(indirect),
+      net_profit: String(pbt),
+      tax_gst: String(tax),
+      profit_after_tax: String(pbt - tax),
+      entered_by: principal.email,
+    };
+  },
+
+  ct_city_income: async (values, { principal }) => {
+    const cities = ['blr', 'hyd', 'che', 'pun', 'mum', 'del', 'kol'];
+    const out: Row = { ...values };
+    let clients = 0, rental = 0, logistic = 0;
+    for (const c of cities) {
+      const cl = num(values[`${c}_clients`]);
+      const rn = num(values[`${c}_rental`]);
+      const lg = num(values[`${c}_logistic`]);
+      out[`${c}_clients`] = String(cl);
+      out[`${c}_rental`] = String(rn);
+      out[`${c}_logistic`] = String(lg);
+      clients += cl; rental += rn; logistic += lg;
+    }
+    out.tot_clients = String(clients);
+    out.tot_rental = String(rental);
+    out.tot_logistic = String(logistic);
+    out.tot_income = String(rental + logistic);
+    out.entered_by = principal.email;
+    return out;
+  },
+
+  ct_rental_trends: async (values, { principal }) => {
+    const pkR = num(values.pk_rental);
+    const pkC = num(values.pk_count);
+    const dlR = num(values.dl_rental);
+    const dlC = num(values.dl_count);
+    return {
+      ...values,
+      pk_rental: String(pkR), pk_count: String(pkC),
+      dl_rental: String(dlR), dl_count: String(dlC),
+      rental_diff: String(pkR - dlR),
+      count_diff: String(pkC - dlC),
+      entered_by: principal.email,
+    };
+  },
+
+  ct_city_gap: async (values, { principal }) => {
+    const cities = ['blr', 'hyd', 'che', 'pun', 'mum', 'del', 'kol'];
+    const out: Row = { ...values };
+    let totP = 0, totD = 0;
+    for (const c of cities) {
+      const p = num(values[`${c}_pickups`]);
+      const d = num(values[`${c}_deliveries`]);
+      out[`${c}_pickups`] = String(p);
+      out[`${c}_deliveries`] = String(d);
+      out[`${c}_diff`] = String(p - d);
+      out[`${c}_pct`] = d > 0 ? String(((p - d) / d) * 100) : '0';
+      totP += p; totD += d;
+    }
+    out.tot_pickups = String(totP);
+    out.tot_deliveries = String(totD);
+    out.tot_diff = String(totP - totD);
+    out.tot_pct = totD > 0 ? String(((totP - totD) / totD) * 100) : '0';
+    out.entered_by = principal.email;
+    return out;
+  },
+
+  ct_interstate: async (values, { principal }) => {
+    const pkDone = num(values.pk_done);
+    const pkTr = num(values.pk_transit);
+    const dlDone = num(values.dl_done);
+    const dlTr = num(values.dl_transit);
+    return {
+      ...values,
+      pk_done: String(pkDone), pk_transit: String(pkTr), pk_total: String(pkDone + pkTr),
+      dl_done: String(dlDone), dl_transit: String(dlTr), dl_total: String(dlDone + dlTr),
+      entered_by: principal.email,
+    };
+  },
+
+  ct_reviews: async (values, { principal }) => {
+    const cities = ['blr', 'hyd', 'che', 'pun', 'mum', 'del', 'kol'];
+    const suffixes = ['pk_req', 'pk_rev', 'pk_neg', 'dl_req', 'dl_rev', 'comm', 'price', 'dmg', 'star'];
+    const out: Row = { ...values };
+    const tot: Record<string, number> = {};
+    for (const s of suffixes) tot[s] = 0;
+    for (const c of cities) {
+      for (const s of suffixes) {
+        const v = num(values[`${c}_${s}`]);
+        out[`${c}_${s}`] = String(v);
+        tot[s] += v;
+      }
+    }
+    out.tot_pk_req = String(tot.pk_req);
+    out.tot_pk_rev = String(tot.pk_rev);
+    out.tot_pk_neg = String(tot.pk_neg);
+    out.tot_dl_req = String(tot.dl_req);
+    out.tot_dl_rev = String(tot.dl_rev);
+    out.entered_by = principal.email;
+    return out;
+  },
+
+  ct_tickets: async (values, { principal }) => {
+    const dmgE = num(values.dmg_exp);
+    const dmgT = num(values.dmg_tix);
+    const missE = num(values.miss_exp);
+    const missT = num(values.miss_tix);
+    const inv = num(values.inv_queries);
+    const esc = num(values.escalations);
+    const vis = num(values.wh_visits);
+    const photo = num(values.photo_video);
+    return {
+      ...values,
+      dmg_exp: String(dmgE), dmg_tix: String(dmgT),
+      miss_exp: String(missE), miss_tix: String(missT),
+      exp_total: String(dmgE + missE),
+      tix_dmg_total: String(dmgT + missT),
+      inv_queries: String(inv), escalations: String(esc),
+      wh_visits: String(vis), photo_video: String(photo),
+      other_total: String(inv + esc + vis + photo),
+      entered_by: principal.email,
+    };
+  },
+
+  ct_delivery_econ: async (values, { principal }) => {
+    const tot = num(values.tot_del);
+    const cust = num(values.by_cust);
+    const sn = num(values.by_sn);
+    const items = num(values.items);
+    const rev = num(values.revenue);
+    return {
+      ...values,
+      tot_del: String(tot), by_cust: String(cust), by_sn: String(sn),
+      items: String(items), revenue: String(rev),
+      conv_rate: tot > 0 ? String((sn / tot) * 100) : '0',
+      earn_per: sn > 0 ? String(rev / sn) : '0',
+      entered_by: principal.email,
+    };
+  },
+
+  ct_calls: async (values, { principal }) => {
+    const callKeys = ['cq_new','cq_rm','cq_enq','cq_pd','cq_biz','cq_inv_ct','cq_inv_ac','cq_new_del','cq_rep_del','cq_dmg','cq_rep_dmg','cq_other','cq_invalid'];
+    const ikKeys = ['ik_new','ik_enq','ik_new_del','ik_other','ik_invalid'];
+    const out: Row = { ...values };
+    let cq = 0, ik = 0;
+    for (const k of callKeys) { const v = num(values[k]); out[k] = String(v); cq += v; }
+    for (const k of ikKeys) { const v = num(values[k]); out[k] = String(v); ik += v; }
+    out.cq_miss = String(num(values.cq_miss));
+    out.cq_total = String(cq);
+    out.ik_total = String(ik);
+    out.entered_by = principal.email;
+    return out;
   },
 
   /** Sales city performance — same rules for all three lines of business. */

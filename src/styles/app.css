@@ -18,13 +18,15 @@
 .rail__brandtext { display: flex; flex-direction: column; min-width: 0; }
 .rail__tag { font-size: 10px; color: var(--rail-ink-dim); letter-spacing: .04em; margin-top: 2px; white-space: nowrap; }
 .rail__mark {
-  width: 30px; height: 30px; border-radius: var(--r-md); flex-shrink: 0;
-  /* Own colours, not --accent. The brand mark should not change when the
-     interface accent does. */
-  background: linear-gradient(160deg, #34d399, #059669);
-  color: #04210f; display: grid; place-items: center;
-  font-size: 12px; font-weight: 800; letter-spacing: -.02em;
+  width: 30px; height: 30px; flex-shrink: 0;
+  /* Own colour, not --accent. The brand mark should not change when the
+     interface accent does. The mark is line art on the rail's own surface,
+     so there is no chip behind it — a filled tile would box in a logo that
+     is already a closed shape. */
+  color: #4caf50;
+  display: grid; place-items: center;
 }
+.rail__mark svg { display: block; }
 .rail__word { font-size: var(--fs-sm); font-weight: 700; letter-spacing: .08em; white-space: nowrap; color: #fff; }
 .rail__nav { flex: 1; overflow-y: auto; padding: var(--s3) var(--s2) var(--s5); }
 .rail__group { margin-top: var(--s4); }

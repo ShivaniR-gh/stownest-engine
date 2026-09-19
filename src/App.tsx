@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, type ReactNode } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AppShell } from '@/components/shell/AppShell';
 import { AuthProvider, useAuth } from '@/lib/auth/AuthContext';
@@ -6,6 +6,16 @@ import { AnalyticsProvider } from '@/lib/analytics/AnalyticsContext';
 import { Skeleton } from '@/components/primitives';
 import SignIn from '@/pages/SignIn';
 import { Forbidden, NotFound } from '@/pages/Status';
+import { usePermission } from '@/lib/permissions/usePermission';
+import { activeDepartments } from '@/config/departments';
+
+function SuperOnly({ children }: { children: ReactNode }) {
+  const { principal, hasDepartment } = usePermission();
+  if (principal?.role === 'super_admin') return <>{children}</>;
+  const first = activeDepartments().find(d => d.inWorkspace && hasDepartment(d.id));
+  return <Navigate to={first ? `/d/${first.id}` : '/forbidden'} replace />;
+}
+
 
 /* Route-level code splitting. The Overview is what most people open, so the
    heavier analytics and admin screens are not in its critical path. */
@@ -51,15 +61,13 @@ function Gatekeeper() {
     <AnalyticsProvider>
       <Suspense fallback={<PageFallback />}>
         <Routes>
-          {/* Presentation runs outside the shell — no sidebar on a projector. */}
-          <Route path="/presentation" element={<Presentation />} />
-
           <Route element={<AppShell />}>
-            <Route index element={<Overview />} />
+            <Route index element={<SuperOnly><Overview /></SuperOnly>} />
+            <Route path="/presentation" element={<SuperOnly><Presentation /></SuperOnly>} />
             <Route path="/d/:deptId" element={<Department />} />
             <Route path="/d/:deptId/:datasetId/:recordId" element={<RecordDetail />} />
-            <Route path="/analytics" element={<Analytics />} />
-            <Route path="/reports" element={<Reports />} />
+            <Route path="/analytics" element={<SuperOnly><Analytics /></SuperOnly>} />
+            <Route path="/reports" element={<SuperOnly><Reports /></SuperOnly>} />
             <Route path="/admin/users" element={<AdminUsers />} />
             <Route path="/admin/permissions" element={<AdminPermissions />} />
             <Route path="/admin/settings" element={<AdminSettings />} />

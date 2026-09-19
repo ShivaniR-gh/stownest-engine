@@ -1,7 +1,11 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import type { DatasetDef, Row } from '@/config/types';
-import { EmptyState, Icon } from '@/components/primitives';
+import { Button, EmptyState, Icon, Popover } from '@/components/primitives';
 import { formatCell, parseDate, toNum } from '@/lib/format';
+import { isRowOpen } from '@/lib/data/editable';
+import { keysInWindow } from '@/lib/analytics/monthWindow';
+import { PeriodSelect } from '@/components/filters/PeriodSelect';
 
 /** ---------------------------------------------------------------------------
  * Collections matrix.
@@ -37,9 +41,10 @@ export function CollectionsMatrix({ monthlyDs, monthly, onEdit }: {
   /** Omit to render read-only. */
   onEdit?: (row: Row) => void;
 }) {
+  const nav = useNavigate();
   /** Every month present in either dataset, so a month with segment rows but
    *  no summary row still gets a column instead of vanishing. */
-  const months = useMemo(() => {
+  const allMonths = useMemo(() => {
     const seen = new Map<number, unknown>();
     for (const r of monthly) {
       const t = monthTime(r.month);
@@ -50,6 +55,26 @@ export function CollectionsMatrix({ monthlyDs, monthly, onEdit }: {
     // at the far end of a sideways scroll.
     return [...seen.entries()].sort((a, b) => b[0] - a[0]);
   }, [monthly]);
+
+  /** yyyy-mm keys for the columns, newest first, for the period filter. */
+  const monthKeys = useMemo(
+    () => allMonths.map(([t]) => {
+      const d = new Date(t);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    }),
+    [allMonths]);
+
+  /** Defaults to the last 12 months rather than the single current one: this
+   *  is the records view, where the point is comparing months side by side,
+   *  and a one-column matrix is not a matrix. */
+  const [pick, setPick] = useState<string>('12m');
+  const months = useMemo(() => {
+    const keep = new Set(keysInWindow(monthKeys, pick));
+    return allMonths.filter(([t]) => {
+      const d = new Date(t);
+      return keep.has(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+    });
+  }, [allMonths, monthKeys, pick]);
 
   const byMonth = useMemo(() => {
     const m = new Map<number, Row>();
@@ -64,18 +89,77 @@ export function CollectionsMatrix({ monthlyDs, monthly, onEdit }: {
       && !SEGMENTS.some(sg => c.key.startsWith(sg.p))),
     [monthlyDs]);
 
-  if (!months.length) {
+  /* Nothing recorded at all is a different situation from nothing inside the
+     selected period — the second must keep the filter on screen, or there is
+     no way back to a window that has data. */
+  if (!allMonths.length) {
     return <EmptyState icon="search" title="No collections rows"
       body="Add a record and its month appears here as a column." />;
   }
 
+  /* Above the card, not inside it — a card holding an .xpose table is given
+     `padding: 0` so the table can bleed to its edges, which leaves anything
+     else in that body jammed against the border. */
+  const filter = (
+    <div className="filter-bar">
+      <PeriodSelect value={pick} onChange={setPick} monthKeys={monthKeys} />
+    </div>
+  );
+
+  if (!months.length) {
+    return (
+      <>
+        {filter}
+        <EmptyState icon="search" title="No months in this period"
+          body="Widen the period to bring earlier months back into view." />
+      </>
+    );
+  }
+
   return (
+    <>
+    {filter}
+    <div className="card"><div className="card__bd">
     <div className="xpose__scroll">
       <table className="xpose">
         <thead>
           <tr>
             <th className="xpose__corner">Month</th>
             {months.map(([t, raw]) => <th key={t} className="is-num">{monthLabel(raw)}</th>)}
+          </tr>
+          <tr>
+            <th className="xpose__rowhd" />
+            {months.map(([t]) => {
+              const row = byMonth.get(t);
+              if (!row) return <td key={t} />;
+              const open = isRowOpen(row, monthly);
+              return (
+                <td key={t} className="is-num">
+                  <Popover width={170} align="end" trigger={({ toggle, ref }) => (
+                    <Button size="sm" iconOnly variant="ghost" icon="more" ref={ref}
+                      aria-label="Row actions" onClick={toggle} />
+                  )}>
+                    {close => (
+                      <>
+                        {row.__id && (
+                          <button className="pop__item" onClick={() => {
+                            close();
+                            nav(`/d/${monthlyDs.department}/${monthlyDs.id}/${encodeURIComponent(String(row.__id))}`);
+                          }}>
+                            <Icon name="external" size={13} /> Open record
+                          </button>
+                        )}
+                        {open && onEdit && (
+                          <button className="pop__item" onClick={() => { close(); onEdit(row); }}>
+                            <Icon name="edit" size={13} /> Edit
+                          </button>
+                        )}
+                      </>
+                    )}
+                  </Popover>
+                </td>
+              );
+            })}
           </tr>
         </thead>
         <tbody>
@@ -141,23 +225,9 @@ export function CollectionsMatrix({ monthlyDs, monthly, onEdit }: {
 
         {/* Edit sits at the foot rather than in the header: always visible, and
             directly under the column of figures it changes. */}
-        {onEdit && (
-          <tfoot>
-            <tr className="xpose__foot">
-              <th scope="row" className="xpose__rowhd" />
-              {months.map(([t]) => (
-                <td key={t} className="is-num">
-                  {byMonth.get(t) && (
-                    <button className="xpose__edit" onClick={() => onEdit(byMonth.get(t)!)}>
-                      <Icon name="gear" size={12} /> Edit
-                    </button>
-                  )}
-                </td>
-              ))}
-            </tr>
-          </tfoot>
-        )}
       </table>
     </div>
+    </div></div>
+    </>
   );
 }

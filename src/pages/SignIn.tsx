@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { renderSignInButton } from '@/lib/auth/googleIdentity';
 import { useAuth } from '@/lib/auth/AuthContext';
 import { Icon } from '@/components/primitives';
+import { BrandMark } from '@/components/shell/BrandMark';
 
 export default function SignIn() {
   const { status, error } = useAuth();
@@ -13,7 +14,7 @@ export default function SignIn() {
     <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: 'var(--canvas)', padding: 'var(--s6)' }}>
       <div style={{ width: '100%', maxWidth: 380 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s3)', marginBottom: 'var(--s7)' }}>
-          <span className="rail__mark" style={{ width: 28, height: 28, fontSize: 12 }}>SN</span>
+          <span className="rail__mark" style={{ width: 28, height: 28 }}><BrandMark size={28} /></span>
           <span style={{ fontSize: 'var(--fs-base)', fontWeight: 650, letterSpacing: '.04em' }}>STOWNEST</span>
         </div>
 

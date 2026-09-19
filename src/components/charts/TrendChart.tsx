@@ -25,6 +25,7 @@ export interface TrendSeries {
  */
 export function TrendChart({
   data, series, height = 240, onPointClick, valueFormat = formatCompactNum, smooth = false,
+  legendStat = 'sum',
 }: {
   data: SeriesPoint[];
   series: TrendSeries[];
@@ -32,6 +33,19 @@ export function TrendChart({
   onPointClick?: (p: SeriesPoint) => void;
   valueFormat?: (n: number) => string;
   smooth?: boolean;
+  /**
+   * What the legend figure beside each series name means.
+   *
+   * 'sum' is right for counts and money — the period total. It is WRONG for a
+   * ratio: summing three months of a 70% valid rate reports 210%, which is not
+   * a number that exists. Percentage and per-unit series must pass 'avg'.
+   *
+   * 'none' drops the figure entirely, leaving a colour key. Use it when the
+   * chart is a comparison between series and the legend only needs to say
+   * which colour is which — a restated total there competes with the KPI
+   * cards for attention without adding anything.
+   */
+  legendStat?: 'sum' | 'avg' | 'none';
 }) {
   const [hidden, setHidden] = useState<Set<string>>(new Set());
   const [hover, setHover] = useState<number | null>(null);
@@ -39,7 +53,8 @@ export function TrendChart({
   const wrap = useRef<HTMLDivElement>(null);
 
   const live = series.filter(s => !hidden.has(s.id));
-  const W = 800, PAD = { t: 10, r: 46, b: 24, l: 52 };
+  const showLabels = height >= 300;
+  const W = 800, PAD = { t: showLabels ? 22 : 10, r: 46, b: 28, l: 52 };
   const iw = W - PAD.l - PAD.r, ih = height - PAD.t - PAD.b;
 
   const { leftTicks, rightTicks, lMax, rMax, hasRight } = useMemo(() => {
@@ -55,23 +70,31 @@ export function TrendChart({
     };
   }, [data, live]);
 
-  const x = (i: number) => (data.length <= 1 ? iw / 2 : (i / (data.length - 1)) * iw);
-  const yFor = (s: TrendSeries, v: number) => scaleY(v, 0, s.axis === 'right' ? rMax : lMax, ih);
   const barSeries = live.filter(s => s.kind === 'bar');
   const bandW = data.length ? iw / data.length : iw;
-  const barW = Math.max(2, Math.min(30, (bandW * 0.62) / Math.max(1, barSeries.length)));
+  const xLine = (i: number) => (data.length <= 1 ? iw / 2 : (i / (data.length - 1)) * iw);
+  const xBand = (i: number) => (i + 0.5) * bandW;
+  const x = barSeries.length ? xBand : xLine;
+  const yFor = (s: TrendSeries, v: number) => scaleY(v, 0, s.axis === 'right' ? rMax : lMax, ih);
+  const groupW = Math.min(bandW * 0.72, 28 * Math.max(1, barSeries.length));
+  const barW = Math.max(2, groupW / Math.max(1, barSeries.length));
 
   const move = (e: React.MouseEvent<SVGRectElement>) => {
     const r = e.currentTarget.getBoundingClientRect();
     const rel = ((e.clientX - r.left) / r.width) * iw;
-    const i = Math.max(0, Math.min(data.length - 1, Math.round((rel / iw) * (data.length - 1))));
+    const i = barSeries.length
+      ? Math.max(0, Math.min(data.length - 1, Math.floor((rel / iw) * data.length)))
+      : Math.max(0, Math.min(data.length - 1, Math.round((rel / iw) * (data.length - 1))));
     setHover(i);
     setTip({ x: e.clientX, y: r.top });
   };
 
   const legend = series.map((s, i) => ({
     id: s.id, label: s.label, color: seriesColor(s.colorIndex ?? i),
-    total: valueFormat(data.reduce((a, d) => a + (d.values[s.id] ?? 0), 0)),
+    total: legendStat === 'none' ? undefined : valueFormat(
+      legendStat === 'avg' && data.length
+        ? data.reduce((a, d) => a + (d.values[s.id] ?? 0), 0) / data.length
+        : data.reduce((a, d) => a + (d.values[s.id] ?? 0), 0)),
   }));
 
   const hp = hover !== null ? data[hover] : null;
@@ -94,9 +117,9 @@ export function TrendChart({
               <text key={t} x={iw + 8} y={scaleY(t, 0, rMax, ih) + 3.5} textAnchor="start">{formatCompactNum(t)}</text>
             ))}
             {data.map((d, i) => {
-              const every = Math.ceil(data.length / 12);
+              const every = data.length <= 14 ? 1 : Math.ceil(data.length / 12);
               return i % every === 0 || i === data.length - 1
-                ? <text key={d.key} x={x(i)} y={ih + 15} textAnchor="middle">{d.label}</text> : null;
+                ? <text key={d.key} x={x(i)} y={ih + 16} textAnchor="middle">{d.label}</text> : null;
             })}
             <line x1={0} x2={iw} y1={ih} y2={ih} />
           </g>
@@ -124,9 +147,18 @@ export function TrendChart({
             return (
               <g key={s.id}>
                 {s.kind === 'area' && (
-                  <path className="chart__area" d={areaPath(pts, ih, smooth)} fill={c} opacity={0.09} />
+                  <path className="chart__area" d={areaPath(pts, ih, smooth)} fill={c} opacity={0.2} />
                 )}
                 <path className="chart__line" d={linePath(pts, smooth)} stroke={c} />
+                {data.map((d, i) => (
+                  <circle key={d.key} cx={x(i)} cy={pts[i][1]} r={showLabels ? 3.2 : 2.4} fill={c} />
+                ))}
+                {showLabels && live.filter(x => x.kind !== 'bar').length <= 2 && data.map((d, i) => (
+                  <text key={`lb-${s.id}-${d.key}`} x={x(i)} y={pts[i][1] - 8} textAnchor="middle"
+                    style={{ fontSize: 9, fontWeight: 650, fill: 'var(--ink-800)' }}>
+                    {valueFormat(d.values[s.id] ?? 0)}
+                  </text>
+                ))}
               </g>
             );
           })}

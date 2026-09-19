@@ -1,8 +1,14 @@
-/* ---------- Enterprise data table ---------- */
-.tbl__wrap { border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--surface); overflow: hidden; box-shadow: var(--sh-sm); }
+/* ---------- Enterprise data table (Setproduct-style layers) ---------- */
+.tbl__wrap {
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  overflow: hidden;
+  box-shadow: var(--sh-md);
+}
 .tbl__bar {
-  display: flex; align-items: center; gap: var(--s2); padding: var(--s3) var(--s4);
-  border-bottom: 1px solid var(--line); flex-wrap: wrap; background: var(--surface-sunk);
+  display: flex; align-items: center; gap: var(--s2); padding: 10px var(--s4);
+  border-bottom: 1px solid var(--line); flex-wrap: wrap; background: var(--surface);
 }
 .tbl__bar-right { margin-left: auto; display: flex; align-items: center; gap: var(--s2); }
 .tbl__scroll { overflow: auto; max-height: 68vh; }
@@ -10,10 +16,11 @@
 
 .tbl thead th {
   position: sticky; top: 0; z-index: 2; background: var(--surface);
-  text-align: left; font-size: var(--fs-micro); font-weight: 650;
-  letter-spacing: .06em; text-transform: uppercase; color: var(--ink-400);
-  padding: 0 var(--s4); height: 42px; white-space: nowrap;
-  border-bottom: 2px solid var(--line);
+  text-align: left; font-size: 11px; font-weight: 650;
+  letter-spacing: .05em; text-transform: uppercase; color: var(--ink-400);
+  padding: 0 var(--s4); height: 40px; white-space: nowrap;
+  border-bottom: 1px solid var(--line);
+  border-right: 1px solid var(--line-faint);
   user-select: none;
 }
 .tbl thead th.is-num { text-align: right; }
@@ -23,16 +30,26 @@
 .tbl__sortidx { font-family: var(--font-num); font-size: 9px; color: var(--accent); }
 
 .tbl tbody td {
-  padding: 0 var(--s4); height: 46px; border-bottom: 1px solid var(--line-faint);
+  padding: 0 var(--s4); height: 48px;
+  border-bottom: 1px solid var(--line-faint);
+  border-right: 1px solid var(--line-faint);
   color: var(--ink-700); white-space: nowrap; max-width: 320px;
   overflow: hidden; text-overflow: ellipsis;
+  background: var(--surface);
 }
+.tbl tbody td:last-child,
+.tbl thead th:last-child { border-right: 0; }
 .tbl tbody td.is-num { text-align: right; font-family: var(--font-num); font-variant-numeric: tabular-nums; color: var(--ink-900); }
 .tbl tbody td.is-key { color: var(--ink-900); font-weight: 620; }
 .tbl tbody td.is-mono { font-family: var(--font-num); font-size: var(--fs-xs); color: var(--ink-600); }
 .tbl tbody tr { transition: background var(--t-fast); }
-.tbl tbody tr:hover { background: var(--accent-soft); }
-.tbl tbody tr[data-selected='true'] { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
+.tbl tbody tr:hover td { background: var(--canvas-tint); }
+.tbl tbody tr[data-selected='true'] td {
+  background: var(--accent-soft);
+}
+.tbl tbody tr[data-selected='true'] td:first-child {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
 .tbl tbody tr[data-clickable='true'] { cursor: pointer; }
 .tbl tbody tr:last-child td { border-bottom: 0; }
 .tbl__group td {
@@ -68,7 +85,7 @@
 .chip__x:hover { opacity: 1; background: var(--accent-line); }
 
 /* ==========================================================================
-   Transposed view — field names down the left, one column per record.
+   Transposed view Ã¢â‚¬â€ field names down the left, one column per record.
    The label column is sticky: with a dozen fields the value you are reading
    is often far right, and an unlabelled number is worthless.
    ========================================================================== */
@@ -77,8 +94,12 @@
 
 .xpose th,
 .xpose td {
-  padding: 9px var(--s4);
+  /* Roomier than the 9px/--s4 it used to be: values are right-aligned and
+     every cell carries a right border, so a tight inline padding put the
+     figure directly against the rule. */
+  padding: 11px var(--s5);
   border-bottom: 1px solid var(--line-faint);
+  border-right: 1px solid var(--line-faint);
   font-size: var(--fs-sm);
   white-space: nowrap;
   text-align: right;
@@ -86,10 +107,11 @@
 
 .xpose thead th {
   position: sticky; top: 0; z-index: 2;
-  background: var(--surface-sunk);
+  background: var(--surface);
   border-bottom: 1px solid var(--line);
-  font-size: var(--fs-micro); font-weight: 650;
-  letter-spacing: .05em; text-transform: uppercase; color: var(--ink-600);
+  font-size: 11px; font-weight: 650;
+  letter-spacing: .05em; text-transform: uppercase; color: var(--ink-400);
+  height: 40px;
 }
 
 /* The label column is sized, not stretched. Left to itself the table hands it
@@ -108,8 +130,20 @@
 /* Months share the remaining width evenly rather than each hugging its digits. */
 .xpose thead th:not(.xpose__corner) { min-width: 140px; }
 .xpose__corner { z-index: 3; background: var(--surface-sunk); }
+
+/* Records tables that must scroll as one grid â€” month moves with the cities. */
+.xpose--free .xpose__corner,
+.xpose--free .xpose__rowhd {
+  position: static;
+  left: auto;
+  z-index: auto;
+  width: auto;
+  min-width: 110px;
+  max-width: none;
+}
+
 .xpose tbody tr:hover td,
-.xpose tbody tr:hover .xpose__rowhd { background: var(--surface-sunk); }
+.xpose tbody tr:hover .xpose__rowhd { background: var(--canvas-tint); }
 
 /* The first data column is the newest record, so give it slightly more weight
    than the history beside it. */
@@ -157,3 +191,59 @@
 .xpose__edit:hover { background: var(--accent-soft); border-color: var(--accent-line); color: var(--accent); }
 .xpose__edit:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 @media (prefers-reduced-motion: reduce) { .xpose__edit { transition: none; } }
+
+/* Same shell as DataTable for every dashboard .xpose inside a card. */
+.card:has(table.xpose) {
+  padding: 0;
+  overflow: hidden;
+  box-shadow: var(--sh-md);
+}
+.card:has(table.xpose) > .card__bd {
+  padding: 20px 24px 12px;
+  overflow: auto;
+  max-height: 68vh;
+}
+.card:has(table.xpose) .xpose th,
+.card:has(table.xpose) .xpose td {
+  padding-left: var(--s5);
+  padding-right: var(--s5);
+}
+.tbl__foot {
+  background: var(--surface);
+  min-height: 44px;
+}
+.tbl__freeze {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--surface);
+  box-shadow: 6px 0 10px rgba(20, 33, 61, .04);
+}
+.tbl thead th.tbl__freeze { z-index: 4; background: var(--surface); }
+
+/* Row labels: `.xpose th` (0-1-1) sets text-align:right and outranks a bare
+   `.xpose__rowhd` (0-1-0), so labels were pinned against the column border.
+   Qualifying with the element lifts these to 0-2-1 so left alignment wins. */
+.xpose th.xpose__corner,
+.xpose td.xpose__corner,
+.xpose th.xpose__rowhd,
+.xpose td.xpose__rowhd {
+  text-align: left;
+  padding-left: 20px;
+  padding-right: 28px;
+}
+.tbl thead th:first-child,
+.tbl tbody td:first-child,
+.tbl tfoot td:first-child {
+  padding-left: 20px;
+  padding-right: 24px;
+}
+/* was: .xpose { border-collapse: separate; border-spacing: 0; width: max-content; min-width: 100%; } */
+.xpose { border-collapse: separate; border-spacing: 0; width: max-content; }
+.ct-records .grid--kpi,
+.ct-records .grid--kpi-std { display: none !important; }
+
+.ct-records .section { margin-top: 12px; }
+.ct-records .ct-rec-head { margin: 0 0 8px; }
+.ct-records .filter-bar { margin-bottom: 0; }
+.ct-records .cef__sec { margin-top: 0; }

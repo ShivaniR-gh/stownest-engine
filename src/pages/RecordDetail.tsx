@@ -1,11 +1,11 @@
 import { useMemo, useState } from 'react';
-import { Navigate, useNavigate, useParams } from 'react-router-dom';
+import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { getDataset } from '@/config/datasets';
 import { TopBar } from '@/components/shell/TopBar';
 import { Badge, Button, ConfirmDialog, EmptyState, Icon, Skeleton } from '@/components/primitives';
 import { RecordForm } from '@/components/data/RecordForm';
 import { useDataset } from '@/lib/data/useDataset';
-import { deleteRow, updateRow } from '@/lib/data/store';
+import { deleteRow, scopedId, updateRow } from '@/lib/data/store';
 import { usePermission } from '@/lib/permissions/usePermission';
 import { Gate } from '@/lib/permissions/Gate';
 import { formatCell, isNumericType } from '@/lib/format';
@@ -20,7 +20,13 @@ export default function RecordDetail() {
   const { deptId, datasetId, recordId } = useParams<{ deptId: string; datasetId: string; recordId: string }>();
   const nav = useNavigate();
   const dataset = getDataset(datasetId ?? '');
-  const { rows, status, error } = useDataset(dataset ? dataset.id : null);
+  /* A monthly dataset keeps one sheet tab per month, so the record lives in a
+     tab, not in the bare dataset. The list passes that tab along as ?tab=;
+     without it the unscoped read finds nothing and every record 404s. */
+  const [params] = useSearchParams();
+  const tab = params.get('tab') ?? '';
+  const readId = dataset ? (tab ? scopedId(dataset.id, tab) : dataset.id) : null;
+  const { rows, status, error } = useDataset(readId);
   const { can } = usePermission();
   const [editing, setEditing] = useState(false);
   const [confirming, setConfirming] = useState(false);
@@ -36,7 +42,12 @@ export default function RecordDetail() {
   const mapped = dataset.columns.filter(c => c.sheetColumn);
   const unmapped = dataset.columns.filter(c => !c.sheetColumn);
 
-  const title = record ? String(record[dataset.titleColumn] ?? record.__id) : '';
+  /* Format the title through its own column definition. A month column holds
+     a sheet serial (46235), which is only a date once formatted as one. */
+  const titleCol = dataset.columns.find(c => c.key === dataset.titleColumn);
+  const title = record
+    ? (formatCell(record[dataset.titleColumn], titleCol?.type ?? 'text') || String(record.__id ?? ''))
+    : '';
   const statusCol = dataset.columns.find(c => c.key === dataset.statusColumn);
   const statusVal = record && dataset.statusColumn ? String(record[dataset.statusColumn] ?? '') : '';
 
@@ -156,7 +167,7 @@ export default function RecordDetail() {
 
       {editing && record && (
         <RecordForm dataset={dataset} record={record} onClose={() => setEditing(false)}
-          onSubmit={async values => { await updateRow(dataset.id, String(record.__id), values); }} />
+          onSubmit={async values => { await updateRow(readId ?? dataset.id, String(record.__id), values); }} />
       )}
 
       {confirming && record && (
@@ -165,7 +176,7 @@ export default function RecordDetail() {
           onCancel={() => setConfirming(false)}
           onConfirm={async () => {
             setBusy(true);
-            try { await deleteRow(dataset.id, String(record.__id)); nav(`/d/${deptId}`); }
+            try { await deleteRow(readId ?? dataset.id, String(record.__id)); nav(`/d/${deptId}`); }
             finally { setBusy(false); }
           }}
           body={<>Row <b>{title}</b> will be removed from the <b>{dataset.sheetName}</b> tab. This edits the

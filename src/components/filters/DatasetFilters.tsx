@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { DatasetDef, Row } from '@/config/types';
-import { adapter } from '@/lib/data/store';
+import { adapter, latestFilledTab } from '@/lib/data/store';
 import { Button, Icon } from '@/components/primitives';
+import { WINDOW_PRESETS } from '@/lib/analytics/monthWindow';
 
 /** ---------------------------------------------------------------------------
  * Filter bar for one view.
@@ -76,10 +77,15 @@ export function DatasetFilters({
     if (!monthly) return;
     let cancelled = false;
     adapter.list(dataset.id)
-      .then(r => {
+      .then(async r => {
         if (cancelled) return;
         setMonths(r.tabs ?? []);
-        if (!value.month) onChange({ ...value, month: r.tab || r.tabs?.[0] || '' });
+        if (value.month) return;
+        /* Open on the newest month that HAS readings. The tab list runs ahead
+           of the data — next month's tab always exists and is empty — so
+           tabs[0] opened the dashboard on a month of zeroes. */
+        const filled = await latestFilledTab(dataset.id).catch(() => '');
+        if (!cancelled) onChange({ ...value, month: filled || r.tab || r.tabs?.[0] || '' });
       })
       .catch(() => { /* the view's own error state covers this */ });
     return () => { cancelled = true; };
@@ -103,6 +109,10 @@ export function DatasetFilters({
       }));
   }, [rows, value.city, value.location]);
 
+  /** Capacity datasets measure a level, not a flow. */
+  const snapshotDataset = dataset.columns.some(c => c.key === 'occupied_space')
+    && dataset.columns.some(c => c.key === 'total_space');
+
   const set = (patch: Partial<ViewFilters>) => {
     const next = { ...value, ...patch };
     // Clearing a broader filter clears the narrower ones under it, so the bar
@@ -123,6 +133,13 @@ export function DatasetFilters({
           <Icon name="calendar" size={14} />
           <select value={value.month} onChange={e => set({ month: e.target.value })} aria-label="Month">
             {!months.length && <option value="">Loading…</option>}
+            {/* Rolling windows are offered only where a window can actually be
+                summed. Space is a snapshot — six months of readings describe
+                the same floor six times — so a capacity dataset gets a plain
+                month picker and its charts show a fixed year of history. */}
+            {!snapshotDataset && WINDOW_PRESETS.map(p => (
+              <option key={p.id} value={p.id}>{p.label}</option>
+            ))}
             {months.map(m => <option key={m} value={m}>{m.replace(/^\S+\s/, '')}</option>)}
           </select>
         </label>
@@ -162,7 +179,7 @@ export function DatasetFilters({
       </label>
 
       {active > 0 && (
-        <Button size="sm" variant="ghost" icon="x"
+        <Button size="sm" variant="ghost" icon="close"
                 onClick={() => onChange({ ...EMPTY_FILTERS, month: value.month })}>
           Reset
         </Button>

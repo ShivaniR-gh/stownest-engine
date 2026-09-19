@@ -1,4 +1,4 @@
-import type { DatasetDef } from './types';
+import type { ColumnType, DatasetDef } from './types';
 
 /** ---------------------------------------------------------------------------
  * SHEET MAPPING.
@@ -149,12 +149,780 @@ function salesDataset(
 export const SALES_DATASETS: DatasetDef[] = [
   salesDataset('sales_storage', 'Storage', 'Storage', 'box', 'storage_monthly'),
   salesDataset('sales_moving', 'Moving', 'Moving', 'truck', 'moving_monthly'),
-  salesDataset('sales_business', 'Business', 'Business', 'trending', 'business_monthly'),
 ];
 
 
+/* ------------------------------------------------------------------ *
+ * Operations — the monthly OPS report, one dataset per block.
+ *
+ * The circulated report is four tables that describe the same month:
+ * deliveries, pickups, inter-state, and a small ticket count. They are four
+ * datasets rather than one because they have genuinely different shapes — a
+ * single flat row carrying all of them would be 120 columns wide and the
+ * ticket block, which is two figures with no city split, would be padded out
+ * with sixty blanks.
+ *
+ * Cities are column groups rather than rows, for the same reason sales does
+ * it: a month must stay ONE write. A half-saved month with four cities and no
+ * total is worse than a refused one. The cost is that an eighth city is a
+ * schema change here plus four sheet columns per block.
+ *
+ * The report order differs from the sales one — Pune prints before Mumbai
+ * here. Following the report the team actually reads matters more than
+ * matching the other department, so the order below is the ops order.
+ *
+ * WHAT IS ENTERED AND WHAT IS NOT. Every roll-up in the source sheet was
+ * checked against the circulated figures and all of them reconcile:
+ *   Full Delivery    = Stownest (All)  + Customer (All)      133 + 43  = 176
+ *   Partial Delivery = Stownest (Part) + Customer (Part)      46 + 28  = 74
+ *   Total            = Full + Partial                        176 + 74  = 250
+ *   Total New        = Stownest + Customer                   186 + 7   = 193
+ *   Total Add on     = Stownest add-on + Customer add-on      16 + 2   = 18
+ *   Total Pickups    = New + Add on                          193 + 18  = 211
+ * Because they reconcile, they are ARITHMETIC and are marked derived. A person
+ * retyping any of them is a person who can make a total disagree with the two
+ * numbers beside it.
+ *
+ * The space block of the report is NOT a dataset here. It is the same thing
+ * `warehouse_readings` already stores — occupied space per warehouse per month,
+ * against a total held once in the `warehouses` master. Copying it under
+ * operations would give the company two places to record June's occupancy for
+ * Rampura, and the first month only one of them was filled is the month the
+ * two dashboards start disagreeing. Instead that dataset now names operations
+ * in `alsoIn`, so the ops team enters and reads space on their own page while
+ * the figures stay in one tab.
+ * ------------------------------------------------------------------ */
+
+const OPS_CITIES = [
+  { key: 'blr', name: 'Bangalore' },
+  { key: 'hyd', name: 'Hyderabad' },
+  { key: 'che', name: 'Chennai' },
+  { key: 'pun', name: 'Pune' },
+  { key: 'mum', name: 'Mumbai' },
+  { key: 'del', name: 'Delhi' },
+  { key: 'kol', name: 'Kolkata' },
+] as const;
+
+interface OpsField {
+  suffix: string;
+  /** Header text, prefixed with the city name in the sheet. */
+  label: string;
+  derived?: boolean;
+  help?: string;
+}
+
+/** The month column, one group of columns per city, then the roll-up and the
+ *  audit stamp. Written once because all three city blocks are the same
+ *  skeleton with different fields in the middle. */
+function opsColumns(fields: readonly OpsField[], rollup: OpsField[]): DatasetDef['columns'] {
+  const perCity = OPS_CITIES.flatMap(c => fields.map(f => ({
+    key: `${c.key}_${f.suffix}`,
+    header: `${c.name} ${f.label}`,
+    type: 'number' as const,
+    sheetColumn: `${c.name} ${f.label}`,
+    ...(f.derived
+      ? { derived: true, aggregate: 'sum' as const, help: f.help }
+      : { editable: true, min: 0, aggregate: 'sum' as const, role: 'quantity' as const, help: f.help }),
+  })));
+
+  return [
+    { key: 'month', header: 'Month', type: 'date', sheetColumn: 'Month',
+      required: true, filterable: true, sortable: true, unique: true, role: 'date',
+      help: 'First of the month. One row per month.' },
+
+    ...perCity,
+
+    ...rollup.map(f => ({
+      key: f.suffix,
+      header: f.label,
+      type: (f.suffix.endsWith('_pct') ? 'percent' : 'number') as ColumnType,
+      sheetColumn: f.label,
+      derived: true,
+      ...(f.suffix.endsWith('_pct') ? {} : { aggregate: 'sum' as const }),
+      help: f.help,
+    })),
+
+    { key: 'entered_by', header: 'Entered By', type: 'email', sheetColumn: 'Entered By',
+      derived: true, hiddenByDefault: true },
+  ];
+}
+
+const DELIVERY_FIELDS: OpsField[] = [
+  { suffix: 'sn_all', label: 'Delivery by Stownest (All)' },
+  { suffix: 'sn_part', label: 'Delivery by Stownest (Partial)' },
+  { suffix: 'cust_all', label: 'Delivery by Customer (All)' },
+  { suffix: 'cust_part', label: 'Delivery by Customer (Partial)' },
+  { suffix: 'full', label: 'Full Delivery', derived: true,
+    help: 'Stownest (All) + Customer (All). Computed, never entered.' },
+  { suffix: 'partial', label: 'Partial Delivery', derived: true,
+    help: 'Stownest (Partial) + Customer (Partial). Computed, never entered.' },
+  { suffix: 'total', label: 'Total Deliveries', derived: true,
+    help: 'Full + Partial. Computed, never entered.' },
+];
+
+const PICKUP_FIELDS: OpsField[] = [
+  { suffix: 'sn', label: 'Pick up by Stownest' },
+  { suffix: 'cust', label: 'Pick up by Customer' },
+  { suffix: 'sn_addon', label: 'Pick up by Stownest (Add on)' },
+  { suffix: 'cust_addon', label: 'Pick up by Customer (Add on)' },
+  { suffix: 'addon', label: 'Total Add on', derived: true,
+    help: 'Both add-on columns. Computed, never entered.' },
+  { suffix: 'new', label: 'Total New', derived: true,
+    help: 'Stownest + Customer, excluding add-ons. Computed, never entered.' },
+  { suffix: 'total', label: 'Total Pickups', derived: true,
+    help: 'New + Add on. Computed, never entered.' },
+];
+
+/**
+ * Moving. The report files all three under "Inter-State", including the local
+ * moving column, which is not inter-state at all. The columns are named for
+ * what they hold rather than for the block they were found in.
+ */
+const MOVING_FIELDS: OpsField[] = [
+  { suffix: 'del_is', label: 'Delivery by Stownest (Interstate)' },
+  { suffix: 'pick_is', label: 'Pick up by Stownest (Interstate)' },
+  { suffix: 'pick_local', label: 'Pick up by Stownest (Local Moving)' },
+];
+
+export const OPERATIONS_DATASETS: DatasetDef[] = [
+  {
+    id: 'ops_deliveries',
+    label: 'Deliveries',
+    noun: 'month',
+    icon: 'truck',
+    department: 'operations',
+    spreadsheetEnv: 'SHEETS_ID_OPERATIONS',
+    sheetName: 'ops_deliveries_monthly',
+    createMissingTab: true,
+    idColumn: 'month',
+    titleColumn: 'month',
+    dateColumn: 'month',
+    combinedEntry: true,
+    entryForm: 'operations',
+    defaultSort: { key: 'month', dir: 'desc' },
+    auditable: true,
+    columns: opsColumns(DELIVERY_FIELDS, [
+      { suffix: 'tot_sn_all', label: 'Total Delivery by Stownest (All)' },
+      { suffix: 'tot_sn_part', label: 'Total Delivery by Stownest (Partial)' },
+      { suffix: 'tot_cust_all', label: 'Total Delivery by Customer (All)' },
+      { suffix: 'tot_cust_part', label: 'Total Delivery by Customer (Partial)' },
+      { suffix: 'tot_full', label: 'Total Full Delivery' },
+      { suffix: 'tot_partial', label: 'Total Partial Delivery' },
+      { suffix: 'tot_total', label: 'Total Deliveries' },
+      { suffix: 'full_pct', label: 'Full Delivery Share',
+        help: 'Full deliveries as a share of all deliveries.' },
+      { suffix: 'partial_pct', label: 'Partial Delivery Share',
+        help: 'Partial deliveries as a share of all deliveries.' },
+    ]),
+  },
+
+  {
+    id: 'ops_pickups',
+    label: 'Pick-ups',
+    noun: 'month',
+    icon: 'box',
+    department: 'operations',
+    spreadsheetEnv: 'SHEETS_ID_OPERATIONS',
+    sheetName: 'ops_pickups_monthly',
+    createMissingTab: true,
+    idColumn: 'month',
+    titleColumn: 'month',
+    dateColumn: 'month',
+    combinedEntry: true,
+    entryForm: 'operations',
+    defaultSort: { key: 'month', dir: 'desc' },
+    auditable: true,
+    columns: opsColumns(PICKUP_FIELDS, [
+      { suffix: 'tot_sn', label: 'Total Pick up by Stownest' },
+      { suffix: 'tot_cust', label: 'Total Pick up by Customer' },
+      { suffix: 'tot_sn_addon', label: 'Total Pick up by Stownest (Add on)' },
+      { suffix: 'tot_cust_addon', label: 'Total Pick up by Customer (Add on)' },
+      { suffix: 'tot_addon', label: 'Total Add on' },
+      { suffix: 'tot_new', label: 'Total New' },
+      { suffix: 'tot_total', label: 'Total Pickups' },
+    ]),
+  },
+
+  {
+    id: 'ops_moving',
+    label: 'Moving',
+    noun: 'month',
+    icon: 'truck',
+    department: 'operations',
+    spreadsheetEnv: 'SHEETS_ID_OPERATIONS',
+    sheetName: 'ops_moving_monthly',
+    createMissingTab: true,
+    idColumn: 'month',
+    titleColumn: 'month',
+    dateColumn: 'month',
+    combinedEntry: true,
+    entryForm: 'operations',
+    defaultSort: { key: 'month', dir: 'desc' },
+    auditable: true,
+    columns: opsColumns(MOVING_FIELDS, [
+      { suffix: 'tot_del_is', label: 'Total Delivery by Stownest (Interstate)' },
+      { suffix: 'tot_pick_is', label: 'Total Pick up by Stownest (Interstate)' },
+      { suffix: 'tot_pick_local', label: 'Total Pick up by Stownest (Local Moving)' },
+    ]),
+  },
+
+  /**
+   * Tickets. Two figures for the whole month, no city split — that is how the
+   * report records them, and inventing a split the team does not collect would
+   * produce seven columns of zero.
+   */
+  {
+    id: 'ops_tickets',
+    label: 'Tickets',
+    noun: 'month',
+    icon: 'checklist',
+    department: 'operations',
+    spreadsheetEnv: 'SHEETS_ID_OPERATIONS',
+    sheetName: 'ops_tickets_monthly',
+    createMissingTab: true,
+    idColumn: 'month',
+    titleColumn: 'month',
+    dateColumn: 'month',
+    combinedEntry: true,
+    entryForm: 'operations',
+    defaultSort: { key: 'month', dir: 'desc' },
+    auditable: true,
+    transposable: true,
+    columns: [
+      { key: 'month', header: 'Month', type: 'date', sheetColumn: 'Month',
+        required: true, filterable: true, sortable: true, unique: true, role: 'date',
+        help: 'First of the month. One row per month.' },
+      { key: 'warehouse_visit', header: 'Warehouse Visit', type: 'number',
+        sheetColumn: 'Warehouse Visit', editable: true, min: 0, aggregate: 'sum',
+        role: 'quantity' },
+      { key: 'photo_request', header: 'Photo Request', type: 'number',
+        sheetColumn: 'Photo Request', editable: true, min: 0, aggregate: 'sum',
+        role: 'quantity' },
+      { key: 'tot_tickets', header: 'Total Tickets', type: 'number',
+        sheetColumn: 'Total Tickets', derived: true, aggregate: 'sum',
+        help: 'Warehouse visits + photo requests. Computed, never entered.' },
+      { key: 'entered_by', header: 'Entered By', type: 'email', sheetColumn: 'Entered By',
+        derived: true, hiddenByDefault: true },
+    ],
+  },
+];
+
+
+const CT_CITIES = [
+  { key: 'blr', name: 'Bangalore' },
+  { key: 'hyd', name: 'Hyderabad' },
+  { key: 'che', name: 'Chennai' },
+  { key: 'pun', name: 'Pune' },
+  { key: 'mum', name: 'Mumbai' },
+  { key: 'del', name: 'Delhi/Gurugram' },
+  { key: 'kol', name: 'Kolkata' },
+] as const;
+
+function ctBase(id: string, label: string, icon: string, sheetName: string, columns: DatasetDef['columns']): DatasetDef {
+  return {
+    id, label, icon,
+    noun: 'month',
+    department: 'control_tower',
+    spreadsheetEnv: 'SHEETS_ID_CONTROL_TOWER',
+    sheetName,
+    createMissingTab: true,
+    idColumn: 'month',
+    titleColumn: 'month',
+    dateColumn: 'month',
+    combinedEntry: true,
+    entryForm: 'control_tower',
+    defaultSort: { key: 'month', dir: 'desc' },
+    auditable: true,
+    columns,
+  };
+}
+
+const CT_MONTH: DatasetDef['columns'] = [
+  { key: 'month', header: 'Month', type: 'date', sheetColumn: 'Month',
+    required: true, filterable: true, sortable: true, unique: true, role: 'date',
+    help: 'First of the month. One row per month.' },
+];
+
+const CT_AUDIT: DatasetDef['columns'] = [
+  { key: 'entered_by', header: 'Entered By', type: 'email', sheetColumn: 'Entered By',
+    derived: true, hiddenByDefault: true },
+];
+
+const CT_INCOME_CITIES = [
+  { key: 'blr', name: 'Bangalore' },
+  { key: 'hyd', name: 'Hyderabad' },
+  { key: 'che', name: 'Chennai' },
+  { key: 'pun', name: 'Pune' },
+  { key: 'mum', name: 'Mumbai' },
+  { key: 'del', name: 'Delhi/Haryana' },
+  { key: 'kol', name: 'Kolkata' },
+] as const;
+
+export const CONTROL_TOWER_DATASETS: DatasetDef[] = [
+  ctBase('ct_city_income', 'City income', 'receipt', 'ct_city_income', [
+    ...CT_MONTH,
+    ...CT_INCOME_CITIES.flatMap(c => [
+      { key: `${c.key}_clients`, header: `${c.name} Active Clients`, type: 'number' as const,
+        sheetColumn: `${c.name} Active Clients`, editable: true, min: 0, aggregate: 'sum' as const, role: 'quantity' as const },
+      { key: `${c.key}_rental`, header: `${c.name} Rental Income`, type: 'currency' as const,
+        sheetColumn: `${c.name} Rental Income`, editable: true, min: 0, aggregate: 'sum' as const, role: 'revenue' as const },
+      { key: `${c.key}_logistic`, header: `${c.name} Logistic Income`, type: 'currency' as const,
+        sheetColumn: `${c.name} Logistic Income`, editable: true, min: 0, aggregate: 'sum' as const, role: 'revenue' as const },
+    ]),
+    { key: 'tot_clients', header: 'Total Active Clients', type: 'number',
+      sheetColumn: 'Total Active Clients', derived: true, aggregate: 'sum' },
+    { key: 'tot_rental', header: 'Total Rental Income', type: 'currency',
+      sheetColumn: 'Total Rental Income', derived: true, aggregate: 'sum' },
+    { key: 'tot_logistic', header: 'Total Logistic Income', type: 'currency',
+      sheetColumn: 'Total Logistic Income', derived: true, aggregate: 'sum' },
+    { key: 'tot_income', header: 'Total Income', type: 'currency',
+      sheetColumn: 'Total Income', derived: true, aggregate: 'sum' },
+    ...CT_AUDIT,
+  ]),
+
+  ctBase('ct_rental_trends', 'Rental trends', 'trending', 'ct_rental_trends', [
+    ...CT_MONTH,
+    { key: 'pk_rental', header: 'Pickup Rental', type: 'currency',
+      sheetColumn: 'Pickup Rental', editable: true, min: 0, aggregate: 'sum', role: 'revenue' },
+    { key: 'pk_count', header: 'Number of Pickup', type: 'number',
+      sheetColumn: 'Number of Pickup', editable: true, min: 0, aggregate: 'sum', role: 'quantity' },
+    { key: 'dl_rental', header: 'Delivery Rental', type: 'currency',
+      sheetColumn: 'Delivery Rental', editable: true, min: 0, aggregate: 'sum', role: 'revenue' },
+    { key: 'dl_count', header: 'Number of Delivery', type: 'number',
+      sheetColumn: 'Number of Delivery', editable: true, min: 0, aggregate: 'sum', role: 'quantity' },
+    { key: 'rental_diff', header: 'Difference', type: 'currency',
+      sheetColumn: 'Difference', derived: true, aggregate: 'sum',
+      help: 'Pickup rental minus delivery rental.' },
+    { key: 'count_diff', header: 'Count', type: 'number',
+      sheetColumn: 'Count', derived: true, aggregate: 'sum',
+      help: 'Pickups minus deliveries.' },
+    ...CT_AUDIT,
+  ]),
+
+  ctBase('ct_city_gap', 'City gap', 'radar', 'ct_city_gap', [
+    ...CT_MONTH,
+    ...CT_CITIES.flatMap(c => [
+      { key: `${c.key}_pickups`, header: `${c.name} Pick-ups`, type: 'number' as const,
+        sheetColumn: `${c.name} Pick-ups`, editable: true, min: 0, aggregate: 'sum' as const, role: 'quantity' as const },
+      { key: `${c.key}_deliveries`, header: `${c.name} Deliveries`, type: 'number' as const,
+        sheetColumn: `${c.name} Deliveries`, editable: true, min: 0, aggregate: 'sum' as const, role: 'quantity' as const },
+      { key: `${c.key}_diff`, header: `${c.name} Difference`, type: 'number' as const,
+        sheetColumn: `${c.name} Difference`, derived: true, aggregate: 'sum' as const },
+      { key: `${c.key}_pct`, header: `${c.name} Percentage`, type: 'percent' as const,
+        sheetColumn: `${c.name} Percentage`, derived: true },
+    ]),
+    { key: 'tot_pickups', header: 'Total Pick-ups', type: 'number',
+      sheetColumn: 'Total Pick-ups', derived: true, aggregate: 'sum' },
+    { key: 'tot_deliveries', header: 'Total Deliveries', type: 'number',
+      sheetColumn: 'Total Deliveries', derived: true, aggregate: 'sum' },
+    { key: 'tot_diff', header: 'Total Difference', type: 'number',
+      sheetColumn: 'Total Difference', derived: true, aggregate: 'sum' },
+    { key: 'tot_pct', header: 'Total Percentage', type: 'percent',
+      sheetColumn: 'Total Percentage', derived: true },
+    ...CT_AUDIT,
+  ]),
+
+  ctBase('ct_interstate', 'Interstate', 'truck', 'ct_interstate', [
+    ...CT_MONTH,
+    { key: 'pk_done', header: 'Pickup Completed', type: 'number',
+      sheetColumn: 'Pickup Completed', editable: true, min: 0, aggregate: 'sum', role: 'quantity' },
+    { key: 'pk_transit', header: 'Pickup Intransit', type: 'number',
+      sheetColumn: 'Pickup Intransit', editable: true, min: 0, aggregate: 'sum', role: 'quantity' },
+    { key: 'pk_total', header: 'Pickup Total', type: 'number',
+      sheetColumn: 'Pickup Total', derived: true, aggregate: 'sum' },
+    { key: 'dl_done', header: 'Delivery Completed', type: 'number',
+      sheetColumn: 'Delivery Completed', editable: true, min: 0, aggregate: 'sum', role: 'quantity' },
+    { key: 'dl_transit', header: 'Delivery Intransit', type: 'number',
+      sheetColumn: 'Delivery Intransit', editable: true, min: 0, aggregate: 'sum', role: 'quantity' },
+    { key: 'dl_total', header: 'Delivery Total', type: 'number',
+      sheetColumn: 'Delivery Total', derived: true, aggregate: 'sum' },
+    ...CT_AUDIT,
+  ]),
+
+  ctBase('ct_reviews', 'Reviews', 'checklist', 'ct_reviews', [
+    ...CT_MONTH,
+    { key: 'dl_count', header: 'No of Deliveries', type: 'number',
+      sheetColumn: 'No of Deliveries', editable: true, min: 0, aggregate: 'sum', role: 'quantity' },
+    { key: 'review_count', header: 'No of reviews', type: 'number',
+      sheetColumn: 'No of reviews', editable: true, min: 0, aggregate: 'sum', role: 'quantity' },
+    { key: 'bad_comm', header: 'Bad reviews communication/pricing/stars', type: 'number',
+      sheetColumn: 'Bad reviews communication/pricing/stars', editable: true, min: 0, aggregate: 'sum' },
+    { key: 'bad_dmg', header: 'Bad reviews damage & missing', type: 'number',
+      sheetColumn: 'Bad reviews damage & missing', editable: true, min: 0, aggregate: 'sum' },
+    ...CT_CITIES.flatMap(c => [
+      { key: `${c.key}_pk_req`, header: `${c.name} Pickup Requested`, type: 'number' as const,
+        sheetColumn: `${c.name} Pickup Requested`, editable: true, min: 0, aggregate: 'sum' as const },
+      { key: `${c.key}_pk_rev`, header: `${c.name} Pickup Reviewed`, type: 'number' as const,
+        sheetColumn: `${c.name} Pickup Reviewed`, editable: true, min: 0, aggregate: 'sum' as const },
+      { key: `${c.key}_pk_neg`, header: `${c.name} Pickup Negative`, type: 'number' as const,
+        sheetColumn: `${c.name} Pickup Negative`, editable: true, min: 0, aggregate: 'sum' as const },
+      { key: `${c.key}_dl_req`, header: `${c.name} Delivery Requested`, type: 'number' as const,
+        sheetColumn: `${c.name} Delivery Requested`, editable: true, min: 0, aggregate: 'sum' as const },
+      { key: `${c.key}_dl_rev`, header: `${c.name} Delivery Reviewed`, type: 'number' as const,
+        sheetColumn: `${c.name} Delivery Reviewed`, editable: true, min: 0, aggregate: 'sum' as const },
+      { key: `${c.key}_comm`, header: `${c.name} Communication`, type: 'number' as const,
+        sheetColumn: `${c.name} Communication`, editable: true, min: 0, aggregate: 'sum' as const },
+      { key: `${c.key}_price`, header: `${c.name} Pricing/Estimation`, type: 'number' as const,
+        sheetColumn: `${c.name} Pricing/Estimation`, editable: true, min: 0, aggregate: 'sum' as const },
+      { key: `${c.key}_dmg`, header: `${c.name} Damage/Missing`, type: 'number' as const,
+        sheetColumn: `${c.name} Damage/Missing`, editable: true, min: 0, aggregate: 'sum' as const },
+      { key: `${c.key}_star`, header: `${c.name} Only Star`, type: 'number' as const,
+        sheetColumn: `${c.name} Only Star`, editable: true, min: 0, aggregate: 'sum' as const },
+    ]),
+    { key: 'tot_pk_req', header: 'Total Pickup Requested', type: 'number', sheetColumn: 'Total Pickup Requested', derived: true, aggregate: 'sum' },
+    { key: 'tot_pk_rev', header: 'Total Pickup Reviewed', type: 'number', sheetColumn: 'Total Pickup Reviewed', derived: true, aggregate: 'sum' },
+    { key: 'tot_pk_neg', header: 'Total Pickup Negative', type: 'number', sheetColumn: 'Total Pickup Negative', derived: true, aggregate: 'sum' },
+    { key: 'tot_dl_req', header: 'Total Delivery Requested', type: 'number', sheetColumn: 'Total Delivery Requested', derived: true, aggregate: 'sum' },
+    { key: 'tot_dl_rev', header: 'Total Delivery Reviewed', type: 'number', sheetColumn: 'Total Delivery Reviewed', derived: true, aggregate: 'sum' },
+    ...CT_AUDIT,
+  ]),
+
+  ctBase('ct_tickets', 'Tickets', 'checklist', 'ct_tickets', [
+    ...CT_MONTH,
+    { key: 'dmg_exp', header: 'Damages Expense', type: 'currency',
+      sheetColumn: 'Damages Expense', editable: true, min: 0, aggregate: 'sum', role: 'cost' },
+    { key: 'dmg_tix', header: 'Damages Tickets', type: 'number',
+      sheetColumn: 'Damages Tickets', editable: true, min: 0, aggregate: 'sum', role: 'quantity' },
+    { key: 'miss_exp', header: 'Missing Expense', type: 'currency',
+      sheetColumn: 'Missing Expense', editable: true, min: 0, aggregate: 'sum', role: 'cost' },
+    { key: 'miss_tix', header: 'Missing Tickets', type: 'number',
+      sheetColumn: 'Missing Tickets', editable: true, min: 0, aggregate: 'sum', role: 'quantity' },
+    { key: 'exp_total', header: 'Expense Total', type: 'currency',
+      sheetColumn: 'Expense Total', derived: true, aggregate: 'sum' },
+    { key: 'tix_dmg_total', header: 'Damage & Missing Tickets', type: 'number',
+      sheetColumn: 'Damage & Missing Tickets', derived: true, aggregate: 'sum' },
+    { key: 'inv_queries', header: 'Invoice queries', type: 'number',
+      sheetColumn: 'Invoice queries', editable: true, min: 0, aggregate: 'sum', role: 'quantity' },
+    { key: 'escalations', header: 'Service Escalations', type: 'number',
+      sheetColumn: 'Service Escalations', editable: true, min: 0, aggregate: 'sum', role: 'quantity' },
+    { key: 'wh_visits', header: 'Warehouse Visits', type: 'number',
+      sheetColumn: 'Warehouse Visits', editable: true, min: 0, aggregate: 'sum', role: 'quantity' },
+    { key: 'photo_video', header: 'Photo and Video request', type: 'number',
+      sheetColumn: 'Photo and Video request', editable: true, min: 0, aggregate: 'sum', role: 'quantity' },
+    { key: 'other_total', header: 'Other Tickets Total', type: 'number',
+      sheetColumn: 'Other Tickets Total', derived: true, aggregate: 'sum' },
+    ...CT_AUDIT,
+  ]),
+
+  ctBase('ct_delivery_econ', 'Economics', 'receipt', 'ct_delivery_econ', [
+    ...CT_MONTH,
+    { key: 'tot_del', header: 'Total Deliveries', type: 'number',
+      sheetColumn: 'Total Deliveries', editable: true, min: 0, aggregate: 'sum', role: 'quantity' },
+    { key: 'by_cust', header: 'Delivery By Customer', type: 'number',
+      sheetColumn: 'Delivery By Customer', editable: true, min: 0, aggregate: 'sum', role: 'quantity' },
+    { key: 'by_sn', header: 'Delivery By StowNest', type: 'number',
+      sheetColumn: 'Delivery By StowNest', editable: true, min: 0, aggregate: 'sum', role: 'quantity' },
+    { key: 'items', header: 'No Of Items', type: 'number',
+      sheetColumn: 'No Of Items', editable: true, min: 0, aggregate: 'sum', role: 'quantity' },
+    { key: 'revenue', header: 'Delivery Revenue', type: 'currency',
+      sheetColumn: 'Delivery Revenue', editable: true, min: 0, aggregate: 'sum', role: 'revenue' },
+    { key: 'conv_rate', header: 'Conversion Rate', type: 'percent',
+      sheetColumn: 'Conversion Rate', derived: true },
+    { key: 'earn_per', header: 'Earnings/Delivery Requests', type: 'currency',
+      sheetColumn: 'Earnings/Delivery Requests', derived: true },
+    ...CT_AUDIT,
+  ]),
+
+  ctBase('ct_calls', 'Calls', 'users', 'ct_calls', [
+    ...CT_MONTH,
+    { key: 'cq_new', header: 'Call New Query', type: 'number', sheetColumn: 'Call New Query', editable: true, min: 0, aggregate: 'sum' },
+    { key: 'cq_rm', header: 'Call RM Query', type: 'number', sheetColumn: 'Call RM Query', editable: true, min: 0, aggregate: 'sum' },
+    { key: 'cq_enq', header: 'Call Enquiry', type: 'number', sheetColumn: 'Call Enquiry', editable: true, min: 0, aggregate: 'sum' },
+    { key: 'cq_pd', header: 'Call P&D Confirmation', type: 'number', sheetColumn: 'Call P&D Confirmation', editable: true, min: 0, aggregate: 'sum' },
+    { key: 'cq_biz', header: 'Call Business', type: 'number', sheetColumn: 'Call Business', editable: true, min: 0, aggregate: 'sum' },
+    { key: 'cq_inv_ct', header: 'Call Invoice CT', type: 'number', sheetColumn: 'Call Invoice CT', editable: true, min: 0, aggregate: 'sum' },
+    { key: 'cq_inv_ac', header: 'Call Invoice A/c', type: 'number', sheetColumn: 'Call Invoice A/c', editable: true, min: 0, aggregate: 'sum' },
+    { key: 'cq_new_del', header: 'Call New Delivery', type: 'number', sheetColumn: 'Call New Delivery', editable: true, min: 0, aggregate: 'sum' },
+    { key: 'cq_rep_del', header: 'Call Repeated Delivery', type: 'number', sheetColumn: 'Call Repeated Delivery', editable: true, min: 0, aggregate: 'sum' },
+    { key: 'cq_dmg', header: 'Call Damage/Missing', type: 'number', sheetColumn: 'Call Damage/Missing', editable: true, min: 0, aggregate: 'sum' },
+    { key: 'cq_rep_dmg', header: 'Call Repeated Damage/Missing', type: 'number', sheetColumn: 'Call Repeated Damage/Missing', editable: true, min: 0, aggregate: 'sum' },
+    { key: 'cq_other', header: 'Call Other City', type: 'number', sheetColumn: 'Call Other City', editable: true, min: 0, aggregate: 'sum' },
+    { key: 'cq_invalid', header: 'Call Invalid', type: 'number', sheetColumn: 'Call Invalid', editable: true, min: 0, aggregate: 'sum' },
+    { key: 'cq_miss', header: 'Missed Calls', type: 'number', sheetColumn: 'Missed Calls', editable: true, min: 0, aggregate: 'sum' },
+    { key: 'cq_total', header: 'Call Total', type: 'number', sheetColumn: 'Call Total', derived: true, aggregate: 'sum' },
+    { key: 'ik_new', header: 'Interakt New Query', type: 'number', sheetColumn: 'Interakt New Query', editable: true, min: 0, aggregate: 'sum' },
+    { key: 'ik_enq', header: 'Interakt Enquiry', type: 'number', sheetColumn: 'Interakt Enquiry', editable: true, min: 0, aggregate: 'sum' },
+    { key: 'ik_new_del', header: 'Interakt New Delivery', type: 'number', sheetColumn: 'Interakt New Delivery', editable: true, min: 0, aggregate: 'sum' },
+    { key: 'ik_other', header: 'Interakt Other City', type: 'number', sheetColumn: 'Interakt Other City', editable: true, min: 0, aggregate: 'sum' },
+    { key: 'ik_invalid', header: 'Interakt Invalid', type: 'number', sheetColumn: 'Interakt Invalid', editable: true, min: 0, aggregate: 'sum' },
+    { key: 'ik_total', header: 'Interakt Total', type: 'number', sheetColumn: 'Interakt Total', derived: true, aggregate: 'sum' },
+    ...CT_AUDIT,
+  ]),
+];
+
+function moneyCol(key: string, header: string, derived = false): DatasetDef['columns'][number] {
+  return {
+    key, header, type: 'currency', sheetColumn: header,
+    ...(derived
+      ? { derived: true, aggregate: 'sum' as const }
+      : { editable: true, min: 0, aggregate: 'sum' as const, role: 'revenue' as const }),
+  };
+}
+
+export const FINANCE_DATASETS: DatasetDef[] = [
+  {
+    id: 'finance_pnl',
+    label: 'P&L',
+    icon: 'ledger',
+    noun: 'month',
+    department: 'finance',
+    spreadsheetEnv: 'SHEETS_ID_FINANCE',
+    sheetName: 'finance_pnl',
+    createMissingTab: true,
+    idColumn: 'month',
+    titleColumn: 'month',
+    dateColumn: 'month',
+    combinedEntry: true,
+    entryForm: 'finance',
+    defaultSort: { key: 'month', dir: 'desc' },
+    auditable: true,
+    columns: [
+      { key: 'month', header: 'Month', type: 'date', sheetColumn: 'Month',
+        required: true, filterable: true, sortable: true, unique: true, role: 'date' },
+      moneyCol('b2c_storage', 'B2C Storage Service'),
+      moneyCol('b2c_transport', 'B2C Transportation'),
+      moneyCol('b2c_packing', 'B2C Packing and moving'),
+      moneyCol('b2b_storage', 'B2B Storage service'),
+      moneyCol('b2b_transport', 'B2B Transportation'),
+      moneyCol('b2c_rev', 'B2C Revenue', true),
+      moneyCol('b2b_rev', 'B2B Revenue', true),
+      moneyCol('tot_rev', 'Total Revenue', true),
+      moneyCol('cogs_wh_rent', 'COGS WH Rent'),
+      moneyCol('cogs_logistics', 'COGS Logistics'),
+      moneyCol('cogs_labour', 'COGS Contract / Labour'),
+      moneyCol('cogs_damages', 'COGS Damages'),
+      moneyCol('cogs_packing', 'COGS Packing material'),
+      moneyCol('tot_cogs', 'Total COGS', true),
+      moneyCol('gross_profit', 'Gross Profit', true),
+      moneyCol('exp_salary', 'Employee Salary'),
+      moneyCol('exp_marketing', 'Marketing Exp'),
+      moneyCol('exp_intermediary', 'Intermediary charges'),
+      moneyCol('exp_other', 'Other expenses'),
+      moneyCol('exp_emi', 'EMI and interest'),
+      moneyCol('tot_indirect', 'Total Indirect Expenses', true),
+      moneyCol('net_profit', 'Net Profit (PBT)', true),
+      moneyCol('tax_gst', 'Tax (GST)'),
+      moneyCol('profit_after_tax', 'Profit after Tax', true),
+      { key: 'entered_by', header: 'Entered By', type: 'email', sheetColumn: 'Entered By',
+        derived: true, hiddenByDefault: true },
+    ],
+  },
+];
+
+const B2B_CITIES = [
+  'Bengaluru', 'Hyderabad', 'Chennai', 'Mumbai', 'Pune', 'Delhi', 'Kolkata',
+] as const;
+
+function b2bBase(id: string, label: string, icon: string, sheetName: string, columns: DatasetDef['columns']): DatasetDef {
+  return {
+    id, label, icon,
+    noun: 'row',
+    department: 'b2b',
+    spreadsheetEnv: 'SHEETS_ID_B2B',
+    sheetName,
+    createMissingTab: true,
+    idColumn: 'row_key',
+    titleColumn: 'city',
+    dateColumn: 'month',
+    combinedEntry: true,
+    entryForm: 'b2b',
+    defaultSort: { key: 'month', dir: 'desc' },
+    auditable: true,
+    columns,
+  };
+}
+
+export const B2B_DATASETS: DatasetDef[] = [
+  b2bBase('b2b_occupancy', 'Occupancy', 'box', 'b2b_occupancy', [
+    { key: 'row_key', header: 'Row key', type: 'id', sheetColumn: 'Row key',
+      derived: true, unique: true, hiddenByDefault: true },
+    { key: 'month', header: 'Month', type: 'date', sheetColumn: 'Month',
+      required: true, filterable: true, sortable: true, role: 'date' },
+    { key: 'city', header: 'City', type: 'enum', sheetColumn: 'City',
+      required: true, filterable: true, groupable: true, editable: true,
+      enumValues: [...B2B_CITIES], role: 'location' },
+    { key: 'txn_clients', header: 'Transactional Client', type: 'number',
+      sheetColumn: 'Transactional Client', editable: true, min: 0, aggregate: 'sum', role: 'quantity' },
+    { key: 'txn_sqft', header: 'Transactional SQFT', type: 'number',
+      sheetColumn: 'Transactional SQFT', editable: true, min: 0, aggregate: 'sum' },
+    { key: 'nontxn_clients', header: 'Non-Transactional Clients', type: 'number',
+      sheetColumn: 'Non-Transactional Clients', editable: true, min: 0, aggregate: 'sum', role: 'quantity' },
+    { key: 'nontxn_sqft', header: 'Non-Transactional SQFT', type: 'number',
+      sheetColumn: 'Non-Transactional SQFT', editable: true, min: 0, aggregate: 'sum' },
+    { key: 'doc_clients', header: 'Document Clients', type: 'number',
+      sheetColumn: 'Document Clients', editable: true, min: 0, aggregate: 'sum', role: 'quantity' },
+    { key: 'active_clients', header: 'Active Clients', type: 'number',
+      sheetColumn: 'Active Clients', derived: true, aggregate: 'sum',
+      help: 'Transactional + non-transactional + document.' },
+    { key: 'occupied_sqft', header: 'Total Occupied SQFT', type: 'number',
+      sheetColumn: 'Total Occupied SQFT', derived: true, aggregate: 'sum',
+      help: 'Transactional sqft + non-transactional sqft.' },
+    { key: 'entered_by', header: 'Entered By', type: 'email', sheetColumn: 'Entered By',
+      derived: true, hiddenByDefault: true },
+  ]),
+
+  b2bBase('b2b_moves', 'Moves', 'truck', 'b2b_moves', [
+    { key: 'row_key', header: 'Row key', type: 'id', sheetColumn: 'Row key',
+      derived: true, unique: true, hiddenByDefault: true },
+    { key: 'month', header: 'Month', type: 'date', sheetColumn: 'Month',
+      required: true, filterable: true, sortable: true, role: 'date' },
+    { key: 'city', header: 'City', type: 'enum', sheetColumn: 'City',
+      required: true, filterable: true, groupable: true, editable: true,
+      enumValues: [...B2B_CITIES], role: 'location' },
+    { key: 'inward', header: 'Inward', type: 'number',
+      sheetColumn: 'Inward', editable: true, min: 0, aggregate: 'sum', role: 'quantity' },
+    { key: 'outward', header: 'Outward', type: 'number',
+      sheetColumn: 'Outward', editable: true, min: 0, aggregate: 'sum', role: 'quantity' },
+    { key: 'txn_revenue', header: 'Transaction Revenue', type: 'currency',
+      sheetColumn: 'Transaction Revenue', editable: true, min: 0, aggregate: 'sum', role: 'revenue' },
+    { key: 'total_txns', header: 'Total Transactions', type: 'number',
+      sheetColumn: 'Total Transactions', derived: true, aggregate: 'sum',
+      help: 'Inward + outward.' },
+    { key: 'rev_per_move', header: 'Revenue per move', type: 'currency',
+      sheetColumn: 'Revenue per move', derived: true,
+      help: 'Transaction revenue ÷ (inward + outward).' },
+    { key: 'entered_by', header: 'Entered By', type: 'email', sheetColumn: 'Entered By',
+      derived: true, hiddenByDefault: true },
+  ]),
+
+  b2bBase('b2b_revenue', 'Revenue', 'receipt', 'b2b_revenue', [
+    { key: 'row_key', header: 'Row key', type: 'id', sheetColumn: 'Row key',
+      derived: true, unique: true, hiddenByDefault: true },
+    { key: 'month', header: 'Month', type: 'date', sheetColumn: 'Month',
+      required: true, filterable: true, sortable: true, role: 'date' },
+    { key: 'city', header: 'City', type: 'enum', sheetColumn: 'City',
+      required: true, filterable: true, groupable: true, editable: true,
+      enumValues: [...B2B_CITIES], role: 'location' },
+    { key: 'rental_rev', header: 'Rental Revenue', type: 'currency',
+      sheetColumn: 'Rental Revenue', editable: true, min: 0, aggregate: 'sum', role: 'revenue' },
+    { key: 'txn_rev', header: 'Transaction Revenue', type: 'currency',
+      sheetColumn: 'Transaction Revenue', editable: true, min: 0, aggregate: 'sum', role: 'revenue',
+      help: 'Same figure as Moves for this city and month.' },
+    { key: 'logistics_rev', header: 'Logistics Revenue', type: 'currency',
+      sheetColumn: 'Logistics Revenue', editable: true, min: 0, aggregate: 'sum', role: 'revenue' },
+    { key: 'total_rev', header: 'Total Revenue', type: 'currency',
+      sheetColumn: 'Total Revenue', derived: true, aggregate: 'sum',
+      help: 'Rental + transaction + logistics.' },
+    { key: 'entered_by', header: 'Entered By', type: 'email', sheetColumn: 'Entered By',
+      derived: true, hiddenByDefault: true },
+  ]),
+
+  b2bBase('b2b_movement', 'Client movement', 'users', 'b2b_movement', [
+    { key: 'row_key', header: 'Row key', type: 'id', sheetColumn: 'Row key',
+      derived: true, unique: true, hiddenByDefault: true },
+    { key: 'month', header: 'Month', type: 'date', sheetColumn: 'Month',
+      required: true, filterable: true, sortable: true, role: 'date' },
+    { key: 'client_name', header: 'Client Name', type: 'text', sheetColumn: 'Client Name',
+      required: true, editable: true, sortable: true },
+    { key: 'city', header: 'City', type: 'enum', sheetColumn: 'City',
+      required: true, filterable: true, groupable: true, editable: true,
+      enumValues: ['Bengaluru', 'Bangalore', 'Hyderabad', 'Chennai', 'Mumbai', 'Pune', 'Delhi', 'Kolkata'],
+      role: 'location' },
+    { key: 'movement', header: 'Movement', type: 'enum', sheetColumn: 'Movement',
+      required: true, editable: true, filterable: true, groupable: true,
+      enumValues: ['New Client', 'Vacated'] },
+    { key: 'client_type', header: 'Client Type', type: 'enum', sheetColumn: 'Client Type',
+      required: true, editable: true, filterable: true, groupable: true,
+      enumValues: ['Transactional', 'Non Transactional', 'Document'] },
+    { key: 'sqft_change', header: 'SQFT Change', type: 'number', sheetColumn: 'SQFT Change',
+      editable: true, aggregate: 'sum' },
+    { key: 'reason', header: 'Reason', type: 'enum', sheetColumn: 'Reason',
+      editable: true, filterable: true, groupable: true,
+      enumValues: ['New Business', 'Own Warehouse', 'Project/Business Closed'] },
+    { key: 'entered_by', header: 'Entered By', type: 'email', sheetColumn: 'Entered By',
+      derived: true, hiddenByDefault: true },
+  ]),
+
+  b2bBase('b2b_summary', 'Monthly summary', 'chart', 'b2b_summary', [
+    { key: 'month', header: 'Month', type: 'date', sheetColumn: 'Month',
+      required: true, filterable: true, sortable: true, unique: true, role: 'date' },
+    { key: 'active_clients', header: 'Active Clients', type: 'number', sheetColumn: 'Active Clients', derived: true, aggregate: 'sum' },
+    { key: 'new_clients', header: 'New Clients', type: 'number', sheetColumn: 'New Clients', derived: true, aggregate: 'sum' },
+    { key: 'vacated_clients', header: 'Vacated Clients', type: 'number', sheetColumn: 'Vacated Clients', derived: true, aggregate: 'sum' },
+    { key: 'net_clients', header: 'Net Clients', type: 'number', sheetColumn: 'Net Clients', derived: true },
+    { key: 'occupied_sqft', header: 'Occupied SQFT', type: 'number', sheetColumn: 'Occupied SQFT', derived: true, aggregate: 'sum' },
+    { key: 'sqft_added', header: 'SQFT Added', type: 'number', sheetColumn: 'SQFT Added', derived: true },
+    { key: 'sqft_lost', header: 'SQFT Lost', type: 'number', sheetColumn: 'SQFT Lost', derived: true },
+    { key: 'net_sqft', header: 'Net SQFT', type: 'number', sheetColumn: 'Net SQFT', derived: true },
+    { key: 'inward', header: 'Inward', type: 'number', sheetColumn: 'Inward', derived: true, aggregate: 'sum' },
+    { key: 'outward', header: 'Outward', type: 'number', sheetColumn: 'Outward', derived: true, aggregate: 'sum' },
+    { key: 'total_txns', header: 'Total Transactions', type: 'number', sheetColumn: 'Total Transactions', derived: true },
+    { key: 'rental_rev', header: 'Rental Revenue', type: 'currency', sheetColumn: 'Rental Revenue', derived: true, aggregate: 'sum' },
+    { key: 'txn_rev', header: 'Transaction Revenue', type: 'currency', sheetColumn: 'Transaction Revenue', derived: true, aggregate: 'sum' },
+    { key: 'logistics_rev', header: 'Logistics Revenue', type: 'currency', sheetColumn: 'Logistics Revenue', derived: true, aggregate: 'sum' },
+    { key: 'total_rev', header: 'Total Revenue', type: 'currency', sheetColumn: 'Total Revenue', derived: true },
+    { key: 'rev_per_sqft', header: 'Revenue / SQFT', type: 'currency', sheetColumn: 'Revenue / SQFT', derived: true },
+    { key: 'rev_per_client', header: 'Revenue / Client', type: 'currency', sheetColumn: 'Revenue / Client', derived: true },
+    { key: 'rev_per_move', header: 'Revenue / Transaction', type: 'currency', sheetColumn: 'Revenue / Transaction', derived: true },
+    { key: 'client_churn', header: 'Client Churn %', type: 'percent', sheetColumn: 'Client Churn %', derived: true },
+    { key: 'space_churn', header: 'Space Churn %', type: 'percent', sheetColumn: 'Space Churn %', derived: true },
+    { key: 'client_growth', header: 'Client Growth %', type: 'percent', sheetColumn: 'Client Growth %', derived: true },
+    { key: 'sqft_growth', header: 'SQFT Growth %', type: 'percent', sheetColumn: 'SQFT Growth %', derived: true },
+    { key: 'rev_growth', header: 'Revenue Growth %', type: 'percent', sheetColumn: 'Revenue Growth %', derived: true },
+    { key: 'entered_by', header: 'Entered By', type: 'email', sheetColumn: 'Entered By', derived: true, hiddenByDefault: true },
+  ]),
+
+  b2bBase('b2b_sales', 'Sales', 'trending', 'b2b_sales', [
+    { key: 'row_key', header: 'Row key', type: 'id', sheetColumn: 'Row key',
+      derived: true, unique: true, hiddenByDefault: true },
+    { key: 'month', header: 'Month', type: 'date', sheetColumn: 'Month',
+      required: true, filterable: true, sortable: true, role: 'date' },
+    { key: 'city', header: 'City', type: 'enum', sheetColumn: 'City',
+      required: true, filterable: true, groupable: true, editable: true,
+      enumValues: [...B2B_CITIES], role: 'location' },
+    { key: 'total_leads', header: 'Total Leads', type: 'number', sheetColumn: 'Total Leads',
+      editable: true, min: 0, aggregate: 'sum', role: 'quantity' },
+    { key: 'invalid', header: 'Invalid Leads', type: 'number', sheetColumn: 'Invalid Leads',
+      editable: true, min: 0, aggregate: 'sum', role: 'quantity' },
+    { key: 'unresponsive', header: 'Unresponsive Leads', type: 'number', sheetColumn: 'Unresponsive Leads',
+      editable: true, min: 0, aggregate: 'sum', role: 'quantity' },
+    { key: 'valid', header: 'Valid Leads', type: 'number', sheetColumn: 'Valid Leads',
+      derived: true, aggregate: 'sum', help: 'Total − invalid − unresponsive.' },
+    { key: 'txn_leads', header: 'Transactional Leads', type: 'number', sheetColumn: 'Transactional Leads',
+      editable: true, min: 0, aggregate: 'sum', role: 'quantity' },
+    { key: 'nontxn_leads', header: 'Non-Transactional Leads', type: 'number', sheetColumn: 'Non-Transactional Leads',
+      editable: true, min: 0, aggregate: 'sum', role: 'quantity' },
+    { key: 'doc_leads', header: 'Document Leads', type: 'number', sheetColumn: 'Document Leads',
+      editable: true, min: 0, aggregate: 'sum', role: 'quantity' },
+    { key: 'following_up', header: 'Following Up', type: 'number', sheetColumn: 'Following Up',
+      editable: true, min: 0, aggregate: 'sum', role: 'quantity' },
+    { key: 'closed_won', header: 'Closed Won', type: 'number', sheetColumn: 'Closed Won',
+      editable: true, min: 0, aggregate: 'sum', role: 'quantity' },
+    { key: 'closed_lost', header: 'Closed Lost', type: 'number', sheetColumn: 'Closed Lost',
+      editable: true, min: 0, aggregate: 'sum', role: 'quantity' },
+    { key: 'cold', header: 'Cold Leads', type: 'number', sheetColumn: 'Cold Leads',
+      editable: true, min: 0, aggregate: 'sum', role: 'quantity' },
+    { key: 'conversion', header: 'Conversion Rate', type: 'percent', sheetColumn: 'Conversion Rate',
+      derived: true, help: 'Closed won ÷ valid leads.' },
+    { key: 'sqft_won', header: 'SQFT Won', type: 'number', sheetColumn: 'SQFT Won',
+      editable: true, min: 0, aggregate: 'sum' },
+    { key: 'est_rev', header: 'Estimated Monthly Revenue', type: 'currency', sheetColumn: 'Estimated Monthly Revenue',
+      editable: true, min: 0, aggregate: 'sum', role: 'revenue' },
+    { key: 'avg_sqft', header: 'Avg SQFT / Client', type: 'number', sheetColumn: 'Avg SQFT / Client', derived: true },
+    { key: 'avg_price', header: 'Avg Price / SQFT', type: 'currency', sheetColumn: 'Avg Price / SQFT', derived: true },
+    { key: 'lost_too_far', header: 'Lost — location too far', type: 'number',
+      sheetColumn: 'Lost location too far', editable: true, min: 0, aggregate: 'sum' },
+    { key: 'lost_no_need', header: 'Lost — no longer requires service', type: 'number',
+      sheetColumn: 'Lost no longer requires', editable: true, min: 0, aggregate: 'sum' },
+    { key: 'lost_unsuitable', header: 'Lost — requirement not suitable', type: 'number',
+      sheetColumn: 'Lost requirement not suitable', editable: true, min: 0, aggregate: 'sum' },
+    { key: 'lost_ops', header: 'Lost — operational not accommodated', type: 'number',
+      sheetColumn: 'Lost operational', editable: true, min: 0, aggregate: 'sum' },
+    { key: 'lost_other_loc', header: 'Lost — requires another location', type: 'number',
+      sheetColumn: 'Lost another location', editable: true, min: 0, aggregate: 'sum' },
+    { key: 'lost_other', header: 'Lost — other', type: 'number',
+      sheetColumn: 'Lost other', editable: true, min: 0, aggregate: 'sum' },
+    { key: 'entered_by', header: 'Entered By', type: 'email', sheetColumn: 'Entered By',
+      derived: true, hiddenByDefault: true },
+  ]),
+];
+
 export const DATASETS: DatasetDef[] = [
   ...SALES_DATASETS,
+  ...OPERATIONS_DATASETS,
+  ...CONTROL_TOWER_DATASETS,
+  ...FINANCE_DATASETS,
+  ...B2B_DATASETS,
   /* ------------------------------------------------------------------ *
    * Warehouses — the master list.
    *
@@ -223,6 +991,9 @@ export const DATASETS: DatasetDef[] = [
     label: 'Warehouse Space',
     noun: 'reading',
     department: 'facility',
+    /* The ops report carries a space block that is this dataset. Surfacing it
+     * rather than copying it is what keeps one month of occupancy in one tab. */
+    alsoIn: ['operations'],
     spreadsheetEnv: 'SHEETS_ID_FACILITY',
     sheetName: 'Readings',
     tabStrategy: 'monthly',
@@ -275,13 +1046,15 @@ export const DATASETS: DatasetDef[] = [
       { key: 'utilisation_pct', header: 'Utilisation %', type: 'percent', sheetColumn: 'Utilisation %',
         derived: true },
 
+      { key: 'avg_space', header: 'Average Space (sqft)', type: 'number',
+        sheetColumn: 'Average Space', derived: true,
+        help: 'Occupied space per active customer. Blank when there are no customers, '
+          + 'because an average over nobody is not zero.' },
+
       /* --- customers, entered monthly per warehouse ---
        *
-       * Churn divides by the OPENING balance, not the closing total: the
-       * customers who joined this month were never at risk of leaving it.
-       * Opening is derived from the three entered figures, so a month is
-       * self-contained and can be corrected without touching its neighbour —
-       * and it doubles as a check, since it should equal last month's total. */
+       * Churn = customers left ÷ closing total × 100. Average space is
+       * occupied sqft ÷ closing total. */
       { key: 'total_customers', header: 'Total Customers', type: 'number',
         sheetColumn: 'Total Customers',
         editable: true, min: 0, aggregate: 'sum', role: 'quantity',
@@ -297,13 +1070,9 @@ export const DATASETS: DatasetDef[] = [
         editable: true, min: 0, aggregate: 'sum', role: 'quantity',
         help: 'Left during this month.' },
 
-      { key: 'opening_customers', header: 'Opening Customers', type: 'number',
-        sheetColumn: 'Opening Customers', derived: true, aggregate: 'sum',
-        help: 'Total minus new plus left. Should match last month closing.' },
-
-              { key: 'churn_pct', header: 'Churn %', type: 'percent',
+      { key: 'churn_pct', header: 'Churn %', type: 'percent',
         sheetColumn: 'Churn %', derived: true,
-        help: 'Left as a share of the opening balance. Computed, never entered.' },
+        help: 'Customers left ÷ customers at the start of the month (total − new + left) × 100. Computed, never entered.' },
 
       { key: 'entered_by', header: 'Entered By', type: 'email', sheetColumn: 'Entered By',
         derived: true, hiddenByDefault: true },

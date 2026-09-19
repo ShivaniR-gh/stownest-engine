@@ -1,16 +1,10 @@
 /* ==========================================================================
-   Collections dashboard.
-
-   The four headline cards take the gradient treatment from metrics.css, but
-   with hues fixed per position rather than rotating — Raised and Collected
-   should not swap colour when a card is added. Outstanding and Gap sit on the
-   warm end because they are the two figures that ask for action.
+   Legacy note: this file previously carried fixed-hue [data-kpi] rules for
+   the KPI cards. Every dashboard that used them (Control Tower, Operations,
+   Finance, Sales) has moved to the neutral + accent-border treatment in
+   metrics.css (.grid--kpi-std), same as Collections — so those rules were
+   removed rather than left dead.
    ========================================================================== */
-
-.coll__kpi[data-kpi='1'] { background: linear-gradient(140deg, var(--kpi-1a), var(--kpi-1b)); }
-.coll__kpi[data-kpi='2'] { background: linear-gradient(140deg, var(--kpi-2a), var(--kpi-2b)); }
-.coll__kpi[data-kpi='3'] { background: linear-gradient(140deg, var(--kpi-3a), var(--kpi-3b)); }
-.coll__kpi[data-kpi='4'] { background: linear-gradient(140deg, var(--kpi-4a), var(--kpi-4b)); }
 .coll__kpi { border-color: transparent; }
 .coll__kpi .metric__value { font-size: var(--fs-2xl); letter-spacing: -.025em; }
 
@@ -160,3 +154,16 @@
 .coll__seg.is-empty .coll__seg-nm,
 .coll__seg.is-empty .coll__seg-share { color: var(--ink-400); }
 .coll__seg-none { margin: var(--s3) 0 0; font-size: var(--fs-xs); color: var(--ink-400); }
+/* Strip that must line up with a KPI row above it.
+   Two fixes, both needed for the edges to actually match: the default
+   .coll__strip is auto-fit (two cells become two half-width columns), and its
+   gap is --s3 while .grid uses --s4 — a different gap shifts every column
+   even when the track count is right. */
+.coll__strip--kpi4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--s4);
+  margin-top: var(--s4);
+}
+@media (max-width: 900px) {
+  .coll__strip--kpi4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

@@ -41,6 +41,37 @@ export const adapter: DataAdapter = new SheetsAdapter();
  * ------------------------------------------------------------------------- */
 export const scopedId = (id: string, tab?: string) => (tab ? `${id}::${tab}` : id);
 
+/**
+ * The newest month tab of a monthly dataset that actually holds rows.
+ *
+ * The tab list is generated from the calendar, so it always runs ahead of the
+ * data: next month's tab exists and is empty, and the current month is usually
+ * empty too until someone enters it. Opening on tabs[0] therefore showed an
+ * all-zero dashboard. This walks the list newest-first and stops at the first
+ * tab with rows — normally one or two reads, and the result is cached by the
+ * adapter for the reads that follow.
+ *
+ * Returns '' when the dataset has no rows in any tab.
+ */
+const latestFilled = new Map<string, Promise<string>>();
+export function latestFilledTab(datasetId: string): Promise<string> {
+  const hit = latestFilled.get(datasetId);
+  if (hit) return hit;
+  const run = (async () => {
+    const { tabs = [] } = await adapter.list(datasetId);
+    for (const tab of tabs) {
+      try {
+        const r = await adapter.list(datasetId, { tab });
+        if (r.rows.length > 0) return tab;
+      } catch { /* a tab that does not exist yet is simply empty */ }
+    }
+    return '';
+  })();
+  latestFilled.set(datasetId, run);
+  run.catch(() => latestFilled.delete(datasetId));
+  return run;
+}
+
 export function unscope(key: string): { id: string; tab?: string } {
   const i = key.indexOf('::');
   return i < 0 ? { id: key } : { id: key.slice(0, i), tab: key.slice(i + 2) };

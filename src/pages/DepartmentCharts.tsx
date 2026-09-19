@@ -6,11 +6,14 @@ import { CategoryChart, StackedBarChart } from '@/components/charts/CategoryChar
 import { DonutChart } from '@/components/charts/DonutChart';
 
 import { RankedList } from '@/components/charts/RankedList';
-import { Heatmap } from '@/components/charts/Heatmap';
 import { ScatterChart } from '@/components/charts/ScatterChart';
 import { CollectionsDashboard } from '@/components/metrics/CollectionsDashboard';
 import { MarketingDashboard } from '@/components/metrics/MarketingDashboard';
-import { crosstab, groupBy, timeSeries } from '@/lib/analytics/aggregate';
+import { OperationsDashboard } from '@/components/metrics/OperationsDashboard';
+import { ControlTowerDashboard } from '@/components/metrics/ControlTowerDashboard';
+import { FinanceDashboard } from '@/components/metrics/FinanceDashboard';
+import { B2BDashboard } from '@/components/metrics/B2BDashboard';
+import { groupBy, timeSeries } from '@/lib/analytics/aggregate';
 import { formatINRCompact, formatInt, formatPct, toNum } from '@/lib/format';
 import type { Period } from '@/lib/analytics/period';
 import { B2CReportView } from '@/components/data/B2CReportView';
@@ -41,11 +44,12 @@ export function DepartmentCharts({ department, ctx }: { department: DepartmentId
     case 'sales': return <SalesCharts {...ctx} />;
     case 'logistics': return <LogisticsCharts {...ctx} />;
     case 'warehouse': return <WarehouseCharts {...ctx} />;
-    case 'operations': return <OperationsCharts {...ctx} />;
-    case 'control_tower': return <ControlTowerCharts {...ctx} />;
+    case 'operations': return <OperationsDashboard rows={ctx.rows} activeDatasetId={ctx.activeDatasetId} />;
+    case 'control_tower': return <ControlTowerDashboard rows={ctx.rows} activeDatasetId={ctx.activeDatasetId} />;
     case 'collections': return <CollectionsCharts {...ctx} />;
     case 'marketing': return <MarketingCharts {...ctx} />;
-    case 'finance': return <FinanceCharts {...ctx} />;
+    case 'finance': return <FinanceDashboard rows={ctx.rows} />;
+    case 'b2b': return <B2BDashboard rows={ctx.rows} activeDatasetId={ctx.activeDatasetId} />;
     default: return null;
   }
 }
@@ -166,58 +170,8 @@ function WarehouseCharts({ rows, period, drill }: Ctx) {
   );
 }
 
-/* ------------------------------- Operations ------------------------------- */
-function OperationsCharts({ rows, period, drill }: Ctx) {
-  const tasks = rows.tasks ?? [];
-  const trend = useMemo(() => timeSeries(tasks, 'due_at', period, [
-    { id: 'completed', agg: 'count', filter: r => String(r.status) === 'Completed' },
-    { id: 'delayed', agg: 'count', filter: r => String(r.status) === 'Delayed' },
-  ]), [tasks, period]);
-
-  const byAssignee = useMemo(() => groupBy(tasks, 'assignee'), [tasks]);
-  const byCategory = useMemo(() => groupBy(tasks, 'category'), [tasks]);
-  const heat = useMemo(() => crosstab(tasks, 'assignee', 'status'), [tasks]);
-
-  return (
-    <>
-      <div className="grid grid--split">
-        <ChartFrame title="Completed against delayed" question="Is execution keeping pace with what is due?"
-          department="operations" isEmpty={!tasks.length}>
-          {h => <TrendChart height={h} data={trend} valueFormat={formatInt}
-            series={[
-              { id: 'completed', label: 'Completed', kind: 'bar', colorIndex: 1 },
-              { id: 'delayed', label: 'Delayed', kind: 'bar', colorIndex: 2 },
-            ]}
-            onPointClick={p => drill(`Tasks — ${p.label}`, 'tasks', p.rows)} />}
-        </ChartFrame>
-
-        <ChartFrame title="Tasks by category" question="What kind of work dominates the queue?"
-          department="operations" isEmpty={!byCategory.length}>
-          {() => <DonutChart data={byCategory} centerLabel="Tasks" valueFormat={formatInt}
-            onSliceClick={s => drill(`Tasks — ${s.key}`, 'tasks', s.rows)} />}
-        </ChartFrame>
-      </div>
-
-      <div className="grid grid--2" style={{ marginTop: 'var(--s4)' }}>
-        <ChartFrame title="Load by assignee" question="Is the work spread evenly across the team?"
-          department="operations" isEmpty={!byAssignee.length}>
-          {h => <CategoryChart height={h} data={byAssignee} valueFormat={formatInt}
-            onBarClick={d => drill(`Tasks — ${d.key}`, 'tasks', d.rows)} />}
-        </ChartFrame>
-
-        <ChartFrame title="Assignee against status" question="Whose queue is slipping?"
-          department="operations" isEmpty={!tasks.length}>
-          {() => <Heatmap rowKeys={heat.rowKeys} colKeys={heat.colKeys} cells={heat.cells}
-            rowLabel="Assignee" valueFormat={formatInt}
-            onCellClick={c => drill(`${c.rowKey} · ${c.colKey}`, 'tasks', c.rows)} />}
-        </ChartFrame>
-      </div>
-    </>
-  );
-}
-
 /* ------------------------------ Control Tower ----------------------------- */
-function ControlTowerCharts({ rows, drill }: Ctx) {
+export function ControlTowerCharts({ rows, drill }: Ctx) {
   const tasks = rows.tasks ?? [];
   const jobs = rows.jobs ?? [];
   const delayedTasks = tasks.filter(r => String(r.status) === 'Delayed');
@@ -277,7 +231,7 @@ function MarketingCharts({ rows, activeDatasetId, drill }: Ctx) {
 }
 
 /* --------------------------------- Finance -------------------------------- */
-function FinanceCharts({ rows, period, drill }: Ctx) {
+export function FinanceCharts({ rows, period, drill }: Ctx) {
   const inv = (rows.invoices ?? []).filter(r => String(r.payment_status) !== 'Void');
   const exp = rows.expenses ?? [];
 

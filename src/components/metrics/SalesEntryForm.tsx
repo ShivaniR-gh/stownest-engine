@@ -8,7 +8,7 @@ import type { Row } from '@/config/types';
 /** ---------------------------------------------------------------------------
  * Sales city entry.
  *
- * One form serves Storage, Moving and Business — the three record the same
+ * One form serves Storage and Moving — both record the same
  * things, and which dataset a save lands in follows the line of business
  * selected in the page header. A form per line would be three copies to keep
  * in step.

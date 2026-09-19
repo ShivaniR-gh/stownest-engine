@@ -1,0 +1,123 @@
+/* ==========================================================================
+   Overview.
+
+   Its own stylesheet because the page is a summary surface, not a department:
+   six headline tiles, a department strip, three charts and three tables. The
+   soft tinted chips and the pale sparkline wash are what make it read as a
+   summary rather than as another data table.
+   ========================================================================== */
+
+.ovw__head { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--s4); }
+.ovw__title { font-size: var(--fs-2xl); font-weight: 680; letter-spacing: -.03em; margin: 0; }
+.ovw__sub { color: var(--ink-500); font-size: var(--fs-sm); margin: 2px 0 0; }
+
+/* Department tabs: a filter for the summary strip, not navigation. */
+.ovw__tabs { display: flex; gap: 2px; margin: var(--s4) 0; overflow-x: auto; padding-bottom: 2px; }
+.ovw__tab {
+  padding: 7px 14px; border: 0; background: transparent; cursor: pointer; white-space: nowrap;
+  font: inherit; font-size: var(--fs-sm); color: var(--ink-500); border-radius: var(--r-md);
+  border-bottom: 2px solid transparent; transition: color var(--t-fast), border-color var(--t-fast);
+}
+.ovw__tab:hover { color: var(--ink-900); }
+.ovw__tab.is-on { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+
+/* ------------------------------------------------------------ headline */
+.ovw__kpis {
+  display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px;
+  margin-bottom: var(--s5);
+}
+@media (max-width: 1400px) { .ovw__kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 760px)  { .ovw__kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+.ovw__kpi {
+  position: relative; overflow: hidden; padding: var(--s4) var(--s4) 0;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg);
+  min-height: 132px; display: flex; flex-direction: column;
+}
+.ovw__kpi-hd { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.ovw__kpi-chip {
+  width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center;
+  background: var(--kpi-tint); color: var(--kpi-ink);
+}
+.ovw__kpi-lb { font-size: var(--fs-xs); font-weight: 600; color: var(--ink-600); }
+.ovw__kpi-v { font-size: var(--fs-xl); font-weight: 680; letter-spacing: -.03em; line-height: 1.1; }
+.ovw__kpi-u { font-size: var(--fs-sm); font-weight: 500; color: var(--ink-500); margin-left: 4px; }
+.ovw__kpi-spark { margin: auto -1px -1px; opacity: .85; }
+
+/* One tint per tile, so the six read as a set rather than six blue boxes. */
+.ovw__kpi[data-kpi='1'] { --kpi-tint: #eef3ff; --kpi-ink: #3b63d4; }
+.ovw__kpi[data-kpi='2'] { --kpi-tint: #eafaf3; --kpi-ink: #17a673; }
+.ovw__kpi[data-kpi='3'] { --kpi-tint: #f4eeff; --kpi-ink: #7c52d4; }
+.ovw__kpi[data-kpi='4'] { --kpi-tint: #fff2e8; --kpi-ink: #d97528; }
+.ovw__kpi[data-kpi='5'] { --kpi-tint: #e8f7fb; --kpi-ink: #1d90ad; }
+.ovw__kpi[data-kpi='6'] { --kpi-tint: #fdeef4; --kpi-ink: #c94a7c; }
+[data-theme='dark'] .ovw__kpi[data-kpi] { --kpi-tint: rgba(255, 255, 255, .06); --kpi-ink: var(--ink-700); }
+
+/* ---------------------------------------------------------- departments */
+.ovw__depts { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 1400px) { .ovw__depts { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 760px)  { .ovw__depts { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+.ovw__dept {
+  text-align: left; font: inherit; cursor: pointer; padding: var(--s4);
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg);
+  transition: border-color var(--t-fast), transform var(--t-fast), box-shadow var(--t-fast);
+}
+.ovw__dept:hover { border-color: var(--accent); transform: translateY(-1px); box-shadow: var(--sh-md); }
+.ovw__dept-hd { display: flex; align-items: center; gap: 8px; color: var(--ink-500); margin-bottom: 10px; }
+.ovw__dept-chip {
+  width: 24px; height: 24px; border-radius: 7px; display: grid; place-items: center;
+  background: var(--surface-sunk); color: var(--ink-700);
+}
+.ovw__dept-lb { flex: 1; font-size: var(--fs-xs); font-weight: 600; color: var(--ink-700); }
+.ovw__dept-v { font-size: var(--fs-lg); font-weight: 680; letter-spacing: -.02em; }
+.ovw__dept-note { font-size: var(--fs-xs); color: var(--ink-500); margin: 2px 0 6px; }
+
+/* --------------------------------------------------------------- charts */
+.ovw__charts {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px;
+  margin: var(--s5) 0;
+}
+@media (max-width: 1200px) { .ovw__charts { grid-template-columns: 1fr; } }
+
+/* --------------------------------------------------------------- tables */
+.ovw__tables { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 1200px) { .ovw__tables { grid-template-columns: 1fr; } }
+
+.ovw__tbl { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); }
+.ovw__tbl td { padding: 10px 6px; border-bottom: 1px solid var(--line-faint); }
+.ovw__tbl tr:last-child td { border-bottom: 0; }
+.ovw__rank { width: 22px; color: var(--ink-300); font-size: var(--fs-xs); }
+.ovw__share { width: 62px; color: var(--ink-500); }
+.ovw__dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 8px; }
+.ovw__dot[data-i='0'] { background: var(--c1); } .ovw__dot[data-i='1'] { background: var(--c2); }
+.ovw__dot[data-i='2'] { background: var(--c3); } .ovw__dot[data-i='3'] { background: var(--c4); }
+.ovw__dot[data-i='4'] { background: var(--c5); } .ovw__dot[data-i='5'] { background: var(--c6); }
+.ovw__dot[data-i='6'] { background: var(--c7); } .ovw__dot[data-i='7'] { background: var(--c8); }
+
+.ovw__feed { list-style: none; margin: 0; padding: 0; }
+.ovw__feed li + li { border-top: 1px solid var(--line-faint); }
+.ovw__feed button {
+  display: flex; align-items: center; gap: 10px; width: 100%; padding: 11px 6px;
+  background: transparent; border: 0; cursor: pointer; font: inherit; text-align: left;
+}
+.ovw__feed button:hover .ovw__feed-lb { color: var(--accent); }
+.ovw__feed-lb { font-size: var(--fs-sm); font-weight: 600; }
+.ovw__feed-what { flex: 1; font-size: var(--fs-xs); color: var(--ink-500); }
+.ovw__feed-m { font-size: var(--fs-xs); color: var(--ink-600); }
+
+/* Month picker: one control for the whole page. Every block reads at this
+   month, and any block whose data stops earlier says so on the card. */
+.ovw__month {
+  display: inline-flex; align-items: center; gap: 8px; padding: 7px 12px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md);
+  color: var(--ink-600); cursor: pointer;
+}
+.ovw__month select {
+  border: 0; background: transparent; font: inherit; font-size: var(--fs-sm);
+  font-weight: 600; color: var(--ink-900); cursor: pointer; outline: 0;
+}
+.ovw__kpi-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+/* Shown only when a department is behind the selected month, so the reader
+   never has to guess whether a flat figure is stale or real. */
+.ovw__asof { font-size: var(--fs-2xs, 10px); color: var(--ink-400); }

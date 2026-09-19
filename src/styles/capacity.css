@@ -8,7 +8,7 @@
   --band-critical: #e0574f;
 }
 [data-theme='dark'] {
-  /* Dark still needs its own values — the light set reads as neon on navy. */
+  /* Dark still needs its own values Ã¢â‚¬â€ the light set reads as neon on navy. */
   --band-healthy:  #2ecfa0;
   --band-normal:   #6d95f0;
   --band-moderate: #f0b95c;
@@ -38,7 +38,7 @@
   text-transform: uppercase; color: var(--ink-400); margin-bottom: 6px; }
 .bandcard__meta { font-size: var(--fs-xs); color: var(--ink-600); margin-top: 4px; }
 
-/* Capacity table — presentation only; CRUD stays in the records table below. */
+/* Capacity table Ã¢â‚¬â€ presentation only; CRUD stays in the records table below. */
 .captbl { width: 100%; font-size: var(--fs-sm); }
 .captbl thead th { text-align: left; font-size: var(--fs-micro); font-weight: 650;
   letter-spacing: .06em; text-transform: uppercase; color: var(--ink-400);
@@ -51,3 +51,86 @@
 .captbl tbody td.is-key { color: var(--ink-900); font-weight: 620; }
 .captbl tbody tr:hover { background: var(--accent-soft); }
 .captbl tbody tr:last-child td { border-bottom: 0; }
+/* ==========================================================================
+   Delta figures inside the records table.
+
+   .mk__delta is built for white text on a gradient KPI card Ã¢â‚¬â€ translucent
+   white fill, color:#fff. Dropped into a plain white table that renders as a
+   grey blob with barely-readable text. Inside a table the delta is just a
+   number in a cell, so the pill is removed and the semantic colour does the
+   work instead.
+   ========================================================================== */
+.captbl .mk__delta {
+  display: inline;
+  padding: 0;
+  border-radius: 0;
+  background: none;
+  font-weight: 600;
+  color: var(--ink-700);
+}
+.captbl .mk__delta--pos  { background: none; color: var(--pos); }
+.captbl .mk__delta--neg  { background: none; color: var(--neg); }
+.captbl .mk__delta--idle { background: none; color: var(--ink-400); }
+.captbl .mk__note { color: var(--ink-400); opacity: 1; font-weight: 500; }
+/* Status + notes â€” filled, not a 3px hairline on a white card. */
+.bands { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+.bandcard {
+  border: 1px solid transparent;
+  border-radius: 14px;
+  padding: 16px 16px 14px;
+  position: relative;
+  overflow: hidden;
+}
+.bandcard::before { display: none; }
+.bandcard[data-band='healthy']  { background: #ecfdf5; border-color: #a7f3d0; }
+.bandcard[data-band='normal']   { background: #eff6ff; border-color: #bfdbfe; }
+.bandcard[data-band='moderate'] { background: #fffbeb; border-color: #fde68a; }
+.bandcard[data-band='high']     { background: #fff7ed; border-color: #fed7aa; }
+.bandcard[data-band='critical'] { background: #fef2f2; border-color: #fecaca; }
+.bandcard__top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.bandcard__lb { font-size: 11px; font-weight: 650; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-500); margin: 0; }
+.bandcard__n { font-family: var(--font-num); font-size: 28px; font-weight: 650; letter-spacing: -.03em; color: var(--ink-900); }
+.bandcard__track { height: 6px; border-radius: 99px; background: rgba(15,23,42,.08); margin: 12px 0 8px; overflow: hidden; }
+.bandcard__track span { display: block; height: 100%; border-radius: 99px; }
+.bandcard[data-band='healthy']  .bandcard__track span { background: var(--band-healthy); }
+.bandcard[data-band='normal']   .bandcard__track span { background: var(--band-normal); }
+.bandcard[data-band='moderate'] .bandcard__track span { background: var(--band-moderate); }
+.bandcard[data-band='high']     .bandcard__track span { background: var(--band-high); }
+.bandcard[data-band='critical'] .bandcard__track span { background: var(--band-critical); }
+.bandcard__meta { font-size: 12px; color: var(--ink-600); margin: 0; }
+
+.insights { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+.insight {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 12px 14px; border-radius: 12px; border: 1px solid transparent;
+  font-size: 13px; line-height: 1.45; color: var(--ink-800);
+}
+.insight[data-tone='neg']    { background: #fef2f2; border-color: #fecaca; }
+.insight[data-tone='pos']    { background: #ecfdf5; border-color: #a7f3d0; }
+.insight[data-tone='signal'] { background: #eff6ff; border-color: #bfdbfe; }
+.insight svg { flex: 0 0 auto; margin-top: 2px; }
+
+[data-theme='dark'] .bandcard[data-band='healthy']  { background: #10261f; border-color: #1d4d3d; }
+[data-theme='dark'] .bandcard[data-band='normal']   { background: #15233a; border-color: #1e3a5f; }
+[data-theme='dark'] .bandcard[data-band='moderate'] { background: #2a1d14; border-color: #5b3d16; }
+[data-theme='dark'] .bandcard[data-band='high']     { background: #2a161c; border-color: #5b2430; }
+[data-theme='dark'] .bandcard[data-band='critical'] { background: #2a161c; border-color: #5b2430; }
+[data-theme='dark'] .insight[data-tone='neg']    { background: #2a161c; border-color: #5b2430; }
+[data-theme='dark'] .insight[data-tone='pos']    { background: #10261f; border-color: #1d4d3d; }
+[data-theme='dark'] .insight[data-tone='signal'] { background: #15233a; border-color: #1e3a5f; }
+/* ==========================================================================
+   The low band had no colour rule anywhere: BANDS declares low / healthy /
+   moderate / high / critical, while this file only styled a 'normal' band
+   that nothing emits. Every under-60% site therefore drew a colourless bar
+   and a plain white status card. Low is blue — idle space is a problem to
+   look at, not a failure to alarm about.
+   ========================================================================== */
+:root      { --band-low: #4f7df3; }
+[data-theme='dark'] { --band-low: #6d95f0; }
+
+.util__track[data-band='low'] span { background: var(--band-low); }
+.bandcard[data-band='low'] { background: #eff6ff; border-color: #bfdbfe; }
+.bandcard[data-band='low'] .bandcard__track span { background: var(--band-low); }
+[data-theme='dark'] .bandcard[data-band='low'] { background: #15233a; border-color: #1e3a5f; }
+
+.captbl tbody td[data-tone='neg'] { color: var(--neg); font-weight: 600; }

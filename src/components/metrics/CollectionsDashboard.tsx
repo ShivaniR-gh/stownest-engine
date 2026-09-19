@@ -5,9 +5,11 @@ import { ChartFrame } from '@/components/charts/ChartFrame';
 import { TrendChart } from '@/components/charts/TrendChart';
 import { CategoryChart } from '@/components/charts/CategoryChart';
 import { SectionHeader } from '@/components/metrics/MetricCard';
-import { Button, EmptyState } from '@/components/primitives';
-import { CollectionsEntryForm } from './CollectionsEntryForm';
+import { EmptyState } from '@/components/primitives';
 import { formatINRCompact, formatPct, parseDate, toNum } from '@/lib/format';
+import { keysInWindow, monthKey as ymk, defaultMonthPeriod } from '@/lib/analytics/monthWindow';
+import { PeriodSelect } from '@/components/filters/PeriodSelect';
+import { KpiTile } from '@/components/metrics/KpiTile';
 
 /** ---------------------------------------------------------------------------
  * Collections dashboard.
@@ -39,13 +41,39 @@ export function CollectionsDashboard({ monthly, drill }: {
     () => [...monthly].sort((a, b) => monthKey(a) - monthKey(b)),
     [monthly]);
 
-  const [picked, setPicked] = useState<string>('');
-  const [adding, setAdding] = useState(false);
+  const [pickedRaw, setPicked] = useState<string>('');
+  const monthKeys = useMemo(
+    () => [...ordered].reverse().map(r => ymk(r.month)).filter(Boolean),
+    [ordered]);
+
+  /** Opens on last month; an explicit choice overrides it. Kept as a derived
+   *  value rather than a useState initializer because the month list is not
+   *  known on first render. */
+  const picked = pickedRaw || defaultMonthPeriod(monthKeys);
+
+  const windowed = useMemo(() => {
+    const keys = new Set(keysInWindow(monthKeys, picked));
+    return ordered.filter(r => keys.has(ymk(r.month)));
+  }, [ordered, monthKeys, picked]);
+  /** Latest month in the window. Used only for the cumulative "to date"
+   *  figures, which are running totals carried on the newest row — summing
+   *  those across months would count the same balance repeatedly. */
   const current = useMemo(() => {
-    if (!ordered.length) return null;
-    const hit = picked ? ordered.find(r => String(r.month) === picked) : undefined;
-    return hit ?? ordered[ordered.length - 1];
-  }, [ordered, picked]);
+    if (!windowed.length) return null;
+    return windowed[windowed.length - 1];
+  }, [windowed]);
+
+  /** Sums a per-month column across every month in the selected window.
+   *  The period filter previously computed `windowed` and then read only its
+   *  last row, so "Last 12 Months" and "Last 3 Months" showed the identical
+   *  single-month figure. Flow columns (raised, collected) are additive and
+   *  must be summed; ratios are recomputed from those sums below rather than
+   *  averaged, which would misstate a multi-month gap. */
+  const wsum = (key: string) => windowed.reduce((a, r) => a + n(r, key), 0);
+
+  const periodLabel = windowed.length > 1
+    ? `${monthLabel(windowed[0])} \u2013 ${monthLabel(windowed[windowed.length - 1])}`
+    : current ? monthLabel(current) : '\u2014';
 
   /**
    * The three segments are columns on the month's own row now, so they arrive
@@ -57,25 +85,41 @@ export function CollectionsDashboard({ monthly, drill }: {
     { name: 'Storage Rental', p: 'st' },
   ] as const).map(({ name, p: pre }) => ({
     name,
-    raised: current ? n(current, `${pre}_raised`) : 0,
-    collected: current ? n(current, `${pre}_collected`) : 0,
-    gap: current ? n(current, `${pre}_gap`) : 0,
-    gapPct: current ? n(current, `${pre}_gap_pct`) : 0,
-    share: current ? n(current, `${pre}_share`) : 0,
-  })), [current]);
+    raised: wsum(`${pre}_raised`),
+    collected: wsum(`${pre}_collected`),
+  })), [windowed])
+    .map((sg, _i, all) => {
+      const totalRaised = all.reduce((a, x) => a + x.raised, 0);
+      return {
+        ...sg,
+        gap: sg.raised - sg.collected,
+        gapPct: sg.raised > 0 ? ((sg.raised - sg.collected) / sg.raised) * 100 : 0,
+        share: totalRaised > 0 ? (sg.raised / totalRaised) * 100 : 0,
+      };
+    });
 
-  /** Movement against the month immediately before this one, from the rows in
-   *  view. Not a stored field: inserting an earlier month would leave a stored
-   *  value describing the wrong pair. */
+  /** Collected in this window against the equally-long window immediately
+   *  before it — so a 3-month selection compares against the previous 3
+   *  months, not against a single adjacent month. Computed from the rows in
+   *  view rather than stored: inserting an earlier month would leave a
+   *  stored value describing the wrong pair. */
   const comparison = useMemo(() => {
-    if (!current) return '\u2014';
-    const i = ordered.findIndex(r => String(r.month) === String(current.month));
-    const prev = i > 0 ? n(ordered[i - 1], 'collection_amount') : 0;
-    const now = n(current, 'collection_amount');
-    return prev > 0 && now > 0 ? ((now - prev) / prev).toFixed(2) : '\u2014';
-  }, [ordered, current]);
+    if (!windowed.length) return '\u2014';
+    const firstIdx = ordered.findIndex(r => ymk(r.month) === ymk(windowed[0].month));
+    const prior = firstIdx > 0
+      ? ordered.slice(Math.max(0, firstIdx - windowed.length), firstIdx)
+      : [];
+    const prev = prior.reduce((a, r) => a + n(r, 'collection_month'), 0);
+    const now = windowed.reduce((a, r) => a + n(r, 'collection_month'), 0);
+    return prev > 0 && now > 0 ? (((now - prev) / prev) * 100).toFixed(1) + '%' : '\u2014';
+  }, [ordered, windowed]);
 
-  const trend = useMemo(() => ordered.slice(-12).map(r => ({
+  /** Every month on record, not just the selected window. A trend needs the
+   *  long view to be readable — filtered to one month it collapses to a
+   *  single point, and to three it cannot show a seasonal shape. The KPI
+   *  cards above answer "how much in this period"; this answers "what is the
+   *  shape over time", so it deliberately ignores the period filter. */
+  const trend = useMemo(() => ordered.map(r => ({
     key: String(r.month), label: monthLabel(r), rows: [r],
     values: { raised: n(r, 'raised_amount'), collected: n(r, 'collection_month') },
   })), [ordered]);
@@ -89,58 +133,36 @@ export function CollectionsDashboard({ monthly, drill }: {
     );
   }
 
-  const raised = n(current, 'raised_amount');
-  const collected = n(current, 'collection_month');
-  const pending = n(current, 'pending_amount');
-  const gap = n(current, 'gap_pct');
+  const raised = wsum('raised_amount');
+  const collected = wsum('collection_month');
+  /* Outstanding and Gap are no longer headline tiles — the same story is in
+     "Raised vs collected by month" below, per month rather than as one
+     blended number. Segment-level gap is still shown in Source of revenue. */
 
   return (
     <>
-      {adding && (
-        <CollectionsEntryForm
-          onCancel={() => setAdding(false)}
-          onDone={() => setAdding(false)} />
-      )}
-
+      {/* No entry point here. Adding a month is a Records action — Department
+          already renders "New record" there, gated on view === 'records', and
+          two buttons opening the same form from different tabs is one more
+          than anyone needs. */}
       <section className="section">
-        <SectionHeader title="Collections" note={monthLabel(current)} action={
-          <span style={{ display: 'flex', gap: 'var(--s2)', alignItems: 'center' }}>
-          <Button size="sm" variant="primary" icon="plus" onClick={() => setAdding(true)}>
-            New month
-          </Button>
-          <label className="coll__month">
-            <select value={String(current.month)} onChange={e => setPicked(e.target.value)}
-              aria-label="Month">
-              {[...ordered].reverse().map(r => (
-                <option key={String(r.month)} value={String(r.month)}>{monthLabel(r)}</option>
-              ))}
-            </select>
-          </label>
-          </span>
-        } />
+        <SectionHeader title="Collections" note={periodLabel} />
 
-        <div className="grid grid--kpi">
-          <div className="metric coll__kpi" data-kpi="1">
-            <div className="metric__label">Raised</div>
-            <div className="metric__value num">{formatINRCompact(raised)}</div>
-            <div className="metric__cmp">Invoiced this month</div>
-          </div>
-          <div className="metric coll__kpi" data-kpi="2">
-            <div className="metric__label">Collected</div>
-            <div className="metric__value num">{formatINRCompact(collected)}</div>
-            <div className="metric__cmp">Received this month</div>
-          </div>
-          <div className="metric coll__kpi" data-kpi="3">
-            <div className="metric__label">Outstanding</div>
-            <div className="metric__value num">{formatINRCompact(pending)}</div>
-            <div className="metric__cmp">Pending against this month</div>
-          </div>
-          <div className="metric coll__kpi" data-kpi="4">
-            <div className="metric__label">Gap</div>
-            <div className="metric__value num">{formatPct(gap, 1)}</div>
-            <div className="metric__cmp">Raised not yet collected</div>
-          </div>
+        {/* Its own filter row, matching every other dashboard. It previously
+            sat in the header action slot wrapped in a second <label>, which
+            nests a label inside PeriodSelect's own — invalid, and it broke
+            the pill styling. */}
+        <div className="filter-bar">
+          <PeriodSelect value={picked} onChange={setPicked} monthKeys={monthKeys} />
         </div>
+
+        <div className="grid grid--kpi grid--kpi-std">
+          <KpiTile label="Raised" value={formatINRCompact(raised)}
+            note="Invoiced in period" />
+          <KpiTile label="Collected" value={formatINRCompact(collected)} lead
+            note="Received in period" />
+        </div>
+
 
         {/* Cumulative figures sit apart from the month's four. Mixing "till
             date" into the same row invites reading them as one period. */}
@@ -161,11 +183,11 @@ export function CollectionsDashboard({ monthly, drill }: {
       </section>
 
       <section className="section">
-        <SectionHeader title="Source of revenue" note={monthLabel(current)} />
+        <SectionHeader title="Source of revenue" note={periodLabel} />
         <div className="coll__segs">
           {segRows.map(sg => (
             <div key={sg.name} className="coll__seg" role="button" tabIndex={0}
-              onClick={() => drill(sg.name, 'collections_monthly', [current])}>
+              onClick={() => drill(sg.name, 'collections_monthly', windowed)}>
               <div className="coll__seg-hd">
                 <span className="coll__seg-nm">{sg.name}</span>
                 <span className="coll__seg-share num">{formatPct(sg.share, 1)}</span>
@@ -188,15 +210,16 @@ export function CollectionsDashboard({ monthly, drill }: {
       <section className="section">
         <SectionHeader title="Analysis" />
         <div className="grid grid--split">
-          <ChartFrame title="Raised against collected" department="collections" height={260}
-            question="Is collection keeping up with invoicing?" isEmpty={trend.length < 2}>
+          <ChartFrame title="Raised vs collected by month" department="collections" height={260}
+            question="Which months are we invoicing but not collecting? (full history, not the selected period)"
+            isEmpty={trend.length < 2}>
             {h => (
               <TrendChart height={h} data={trend} valueFormat={formatINRCompact}
                 series={[
-                  { id: 'raised', label: 'Raised', kind: 'area', colorIndex: 0 },
+                  { id: 'raised', label: 'Raised', kind: 'line', colorIndex: 0 },
                   { id: 'collected', label: 'Collected', kind: 'line', colorIndex: 1 },
                 ]}
-                onPointClick={p => drill(`Collections — ${p.label}`, 'collections_monthly', p.rows)} />
+                onPointClick={p => drill(`Collections \u2014 ${p.label}`, 'collections_monthly', p.rows)} />
             )}
           </ChartFrame>
 
@@ -205,7 +228,7 @@ export function CollectionsDashboard({ monthly, drill }: {
             {h => (
               <CategoryChart height={h} valueFormat={n2 => formatPct(n2, 1)}
                 data={segRows.map(sg => ({
-                  key: sg.name, value: sg.gapPct, count: 1, rows: [current],
+                  key: sg.name, value: sg.gapPct, count: windowed.length, rows: windowed,
                 }))}
                 onBarClick={d => drill(d.key, 'collections_monthly', d.rows)} />
             )}

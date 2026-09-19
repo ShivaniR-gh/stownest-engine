@@ -1,7 +1,7 @@
 /* ==========================================================================
    Metric cards.
    Cards are NOT identical: a tonal top edge and a tinted value are derived
-   from the metric's own state — the first card in a row is emphasised, a
+   from the metric's own state â€” the first card in a row is emphasised, a
    positive delta earns mint, a negative one rose, an attention state amber.
    The variation carries meaning, so it survives the data changing.
    ========================================================================== */
@@ -27,7 +27,7 @@
 
 /* The lead metric of a row gets the navy field: the number you read first. */
 .metric--lead {
-  /* The lead metric sits on the brand green with dark ink — high contrast,
+  /* The lead metric sits on the brand green with dark ink â€” high contrast,
      and it makes the first figure the obvious place the eye lands. */
   background: linear-gradient(155deg, var(--accent-bright), var(--accent));
   border-color: var(--accent);
@@ -84,7 +84,7 @@
 .metric__ft { margin-top: auto; padding-top: var(--s3); display: flex; align-items: center; gap: var(--s2); flex-wrap: wrap; }
 .metric__cmp { font-size: var(--fs-micro); color: var(--ink-400); white-space: nowrap; }
 
-/* Percentage metrics get a real progress track — meaningful, not decorative. */
+/* Percentage metrics get a real progress track â€” meaningful, not decorative. */
 .metric__track {
   width: 100%; height: 6px; border-radius: 3px; margin-top: var(--s3); overflow: hidden;
   background: repeating-linear-gradient(90deg,
@@ -106,7 +106,7 @@
 .delta--flat { color: var(--ink-400); background: var(--idle-soft); }
 .metric--lead .delta--pos, .metric--lead .delta--neg, .metric--lead .delta--flat { background: rgba(255,255,255,.14); }
 
-/* Unavailable state — the honest one */
+/* Unavailable state â€” the honest one */
 .metric__void { display: flex; flex-direction: column; gap: 6px; }
 .metric__voidnote { font-size: var(--fs-micro); color: var(--ink-400); line-height: 1.5; }
 .metric__voidnote code {
@@ -139,7 +139,7 @@
 /* ==========================================================================
    Vivid KPI row
    Every card in the top row carries its own gradient field, rotating through
-   four hues by position. Note this is decorative — unlike the tonal top edge
+   four hues by position. Note this is decorative â€” unlike the tonal top edge
    above, the hue says nothing about the metric's state. Keep the tonal rules
    intact so state is still readable inside the coloured card.
    ========================================================================== */
@@ -200,3 +200,202 @@
 .grid--kpi .metric--lead .metric__icon { background: rgba(255,255,255,.18); color: #fff; }
 
 .grid--kpi .metric:hover { transform: translateY(-2px); box-shadow: 0 4px 10px rgba(16,24,40,.10), 0 18px 40px rgba(16,24,40,.16); }
+
+/* ==========================================================================
+   Standardized KPI tile treatment â€” color carries intent, not grid position.
+   Opt in per dashboard via .grid--kpi-std (e.g. B2B, Collections) rather than
+   changing .grid--kpi globally; dashboards not yet migrated keep the
+   positional four-hue cycle above until they're reviewed and switched over.
+
+   Every tile is the same neutral surface â€” no per-position hue. The one
+   headline metric (.metric--lead) is marked with a thin accent border and
+   an accent-colored value instead of a solid gradient fill: a filled block
+   next to flat cards read as a template default, especially on the dark
+   theme this is primarily viewed in. A border + tinted number gets the same
+   "look here first" job done without breaking the card language.
+   ========================================================================== */
+.grid--kpi-std.grid--kpi-std .metric {
+  background: var(--surface, #fff);
+  color: var(--ink-900);
+  border: 1px solid var(--line);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, .04);
+}
+.grid--kpi-std .metric__label,
+.grid--kpi-std .metric__fx { color: var(--ink-600); }
+.grid--kpi-std .metric__value { color: var(--ink-900); }
+.grid--kpi-std .metric__icon { background: var(--ink-300); color: var(--ink-700); border-color: transparent; }
+.grid--kpi-std .metric:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 10px rgba(16, 24, 40, .08), 0 12px 28px rgba(16, 24, 40, .08);
+}
+
+/* Delta chips (â–²/â–¼ MoM Â· YoY) carry their own color regardless of card
+   background, so growth vs. decline reads at a glance instead of sitting in
+   flat gray text. */
+.grid--kpi-std .metric__cmp { display: flex; gap: var(--s3); flex-wrap: wrap; color: var(--ink-600); }
+.grid--kpi-std .delta { font-weight: 600; }
+.grid--kpi-std .delta--pos { color: var(--pos); }
+.grid--kpi-std .delta--neg { color: var(--neg); }
+.grid--kpi-std .delta--na  { color: var(--ink-400); font-weight: 500; }
+
+/* Operations/Marketing's own delta-chip classes â€” same colors, no
+   background pill, since the pill assumed white text on a gradient fill
+   that no longer exists here. */
+.grid--kpi-std .mk__delta { background: none; padding: 0; color: var(--ink-600); font-weight: 600; }
+.grid--kpi-std .mk__delta--pos  { color: var(--pos); }
+.grid--kpi-std .mk__delta--neg  { color: var(--neg); }
+.grid--kpi-std .mk__delta--idle { color: var(--ink-400); font-weight: 500; }
+.grid--kpi-std .mk__note { color: var(--ink-600); opacity: 1; }
+
+/* MetricCard's tone stripe was hidden for every .grid--kpi tile because a
+   gradient-filled card made it redundant. On the neutral surface here it's
+   the signal again â€” pos/neg/signal read at a glance without any card
+   needing its own color. */
+.grid--kpi-std .metric::before { display: block; }
+
+/* Light theme: the accent tile takes a bold gradient fill â€” this is the
+   surface a solid color reads as premium on, per the token file's own note
+   that gradients "sing on white." */
+.grid--kpi-std.grid--kpi-std .metric.metric--lead {
+  border-color: transparent;
+  background: linear-gradient(140deg, var(--accent-bright), var(--accent-strong));
+  box-shadow: 0 1px 2px rgba(16, 24, 40, .06), 0 8px 22px rgba(16, 24, 40, .10);
+}
+.grid--kpi-std .metric--lead .metric__label { color: rgba(255, 255, 255, .74); }
+.grid--kpi-std .metric--lead .metric__value { color: #fff; }
+.grid--kpi-std .metric--lead .metric__icon { background: rgba(255, 255, 255, .18); color: #fff; border-color: transparent; }
+
+/* Dark theme: the same rule (one accent tile, rest neutral), rendered as a
+   thin accent border + tinted number instead of a filled gradient â€” on navy
+   a solid fill blows out the white numerals sitting on it, so restraint
+   does the "look here first" job better than saturation does. */
+[data-theme='dark'] .grid--kpi-std.grid--kpi-std .metric.metric--lead {
+  border-color: var(--accent);
+  border-width: 1px 1px 1px 3px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 8%, var(--surface)), var(--surface));
+  box-shadow: none;
+}
+[data-theme='dark'] .grid--kpi-std .metric--lead .metric__label { color: var(--ink-600); }
+[data-theme='dark'] .grid--kpi-std .metric--lead .metric__value { color: var(--accent-hover); }
+[data-theme='dark'] .grid--kpi-std .metric--lead .metric__icon { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent-hover); border-color: transparent; }
+/* ==========================================================================
+   KPI tile, reference layout: icon chip + label on one line, the value
+   under it, delta chips, then a sparkline pinned to the bottom of the card.
+
+   The chip is a tinted circle rather than a filled block so it reads as a
+   quiet label marker, not a second focal point competing with the number.
+   ========================================================================== */
+.kpi2 { display: flex; flex-direction: column; }
+.kpi2__hd {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  margin-bottom: var(--s2);
+}
+.kpi2 .kpi2__chip,
+.grid--kpi-std .kpi2__chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+}
+.kpi2 .kpi2__chip--neg,
+.grid--kpi-std .kpi2__chip--neg {
+  background: color-mix(in srgb, var(--neg) 12%, transparent);
+  color: var(--neg);
+}
+.kpi2 .metric__label { margin-bottom: 0; }
+
+/* Bottom-pinned, full-bleed to the card's padding so the curve reads as
+   part of the card rather than a floating graphic. */
+.kpi2__spark {
+  margin-top: auto;
+  padding-top: var(--s3);
+  margin-left: calc(var(--s5) * -1);
+  margin-right: calc(var(--s5) * -1);
+  margin-bottom: calc(var(--s4) * -1);
+}
+.kpi2__spark svg { display: block; width: 100%; height: 30px; }
+
+/* On the filled lead tile the chip inverts â€” a tinted-accent circle on an
+   accent background would disappear. */
+.grid--kpi-std .metric--lead .kpi2__chip {
+  background: rgba(255, 255, 255, .18);
+  color: var(--accent-ink);
+}
+[data-theme='dark'] .grid--kpi-std .metric--lead .kpi2__chip {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent-hover);
+}
+
+/* The lead tile's sparkline colour follows the tile treatment, which differs
+   by theme: light fills the card with accent (so the curve must be light),
+   dark keeps it a neutral card with an accent border (so the curve is
+   accent). One token, resolved per theme, rather than a hardcoded colour
+   that would vanish in one of them. */
+:root { --kpi2-spark-lead: #ffffff; }
+[data-theme='dark'] { --kpi2-spark-lead: var(--accent-hover); }
+
+/* Delta chips on the filled lead tile.
+   The pos/neg tokens are tuned for a neutral card; on a saturated accent
+   fill they sit too close to the background to read (a green â–² on a green
+   or blue field). On the lead tile the direction is carried by the arrow
+   and the chips invert to a translucent white pill instead. */
+.grid--kpi-std .metric--lead .metric__cmp .delta,
+.grid--kpi-std .metric--lead .metric__cmp .delta--pos,
+.grid--kpi-std .metric--lead .metric__cmp .delta--neg,
+.grid--kpi-std .metric--lead .metric__cmp .delta--na {
+  color: #fff;
+  background: rgba(255, 255, 255, .16);
+  border-radius: var(--r-sm);
+  padding: 1px 6px;
+}
+/* Dark keeps the lead tile neutral (border treatment), so the normal
+   semantic colours read fine there â€” no inversion needed. */
+[data-theme='dark'] .grid--kpi-std .metric--lead .metric__cmp .delta {
+  background: none;
+  padding: 0;
+}
+[data-theme='dark'] .grid--kpi-std .metric--lead .metric__cmp .delta--pos { color: var(--pos); }
+[data-theme='dark'] .grid--kpi-std .metric--lead .metric__cmp .delta--neg { color: var(--neg); }
+[data-theme='dark'] .grid--kpi-std .metric--lead .metric__cmp .delta--na  { color: var(--ink-400); }
+
+/* Labels were truncating ("ACTIVE CLIENâ€¦") once the icon chip took width
+   from the header row. Let the label wrap to a second line instead of
+   ellipsing â€” a cut-off metric name is worse than a taller card, and the
+   grid row sizes to its tallest card anyway. */
+.kpi2__hd { align-items: flex-start; }
+.kpi2 .metric__label {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  line-height: 1.25;
+  min-width: 0;
+}
+
+/* A long money delta ("â–¼ â‚¹12,81,633 (100.0%)") in a quarter-width card.
+
+   .mk__delta ships as inline-flex with align-items:center. That refuses to
+   shrink below its content, so the text escaped the card; and once allowed to
+   wrap, the trailing "(100.0%)" became a wrapped FLEX ITEM sitting on its own
+   line and off the number's baseline.
+
+   Inside these cards the delta is a short run of text, not a layout box, so
+   it is set to plain inline: the percentage then flows and wraps as text on
+   the same baseline as the figure before it. */
+.grid--kpi-std .metric__cmp { min-width: 0; }
+.grid--kpi-std .metric__cmp .mk__delta,
+.grid--kpi-std .metric__cmp .delta {
+  display: inline;
+  max-width: 100%;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.45;
+}
+.grid--kpi-std .metric__cmp .mk__note { display: inline; }

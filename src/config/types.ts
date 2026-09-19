@@ -82,6 +82,17 @@ export interface DatasetDef {
   /** Singular noun used in buttons and detail headers: "New job", "Delete lead". */
   noun: string;
   department: DepartmentId;
+  /**
+   * Extra departments this dataset appears under, without moving it.
+   *
+   * Two teams sometimes keep the same figures — warehouse occupancy is a
+   * facility record that operations also reports monthly. Listing the second
+   * department here shows one dataset on both pages instead of copying it into
+   * a second tab that drifts. `department` still owns it: permissions and
+   * writes are checked against that one, so this widens what is VISIBLE, never
+   * what a principal may do.
+   */
+  alsoIn?: DepartmentId[];
   businessLine?: string;
   icon?: string;
   /** Tab name inside the spreadsheet. */
@@ -133,7 +144,7 @@ export interface DatasetDef {
    * a department id — a department can then own several datasets with
    * different entry shapes, and adding one touches no shared component.
    */
-    entryForm?: 'collections' | 'marketing' | 'b2c_report' | 'sales';
+    entryForm?: 'collections' | 'marketing' | 'b2c_report' | 'sales' | 'operations' | 'control_tower' | 'finance' | 'b2b';
       
   defaultSort?: { key: string; dir: 'asc' | 'desc' };
   /** Written to an audit tab on every mutation. */

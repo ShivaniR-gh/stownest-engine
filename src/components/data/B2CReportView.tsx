@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react';
 import '@/styles/collections.css';
 import { formatINR, formatINRCompact, formatInt, parseDate, toNum } from '@/lib/format';
 import type { Row } from '@/config/types';
+import { isRowOpen } from '@/lib/data/editable';
+import { SelectField } from '@/components/filters/SelectField';
 
 /** ---------------------------------------------------------------------------
  * B2C monthly report.
@@ -114,17 +116,14 @@ export function B2CReportView({ rows, variant = 'records', onEdit }: {
 
   return (
     <>
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 'var(--s3)',
-        marginBottom: 'var(--s4)',
-      }}>
-        <select className="field" style={{ maxWidth: 180 }} value={activeKey}
-          onChange={e => setPick(e.target.value)} aria-label="Month">
-          {months.map(([k, r]) => (
-            <option key={k} value={k}>{monthLabel(r.month)}</option>
-          ))}
-        </select>
-        {onEdit && activeRow && (
+      {/* Same pill as every other filter row. SelectField rather than
+          PeriodSelect: this view selects one month by index, so the 3/6/12
+          month presets PeriodSelect offers have no meaning here. */}
+      <div className="filter-bar">
+        <SelectField icon="calendar" label="Month" value={activeKey}
+          onChange={setPick}
+          options={months.map(([k, r]) => ({ value: k, label: monthLabel(r.month) }))} />
+        {onEdit && activeRow && isRowOpen(activeRow, rows) && (
           <button className="pop__item" onClick={() => onEdit(activeRow)}>Edit this month</button>
         )}
       </div>

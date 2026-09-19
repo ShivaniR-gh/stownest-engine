@@ -28,6 +28,7 @@ export function ChartFrame({
   actions?: ReactNode;
 }) {
   const [full, setFull] = useState(false);
+  const [zoom, setZoom] = useState(1);
 
   const body = (h: number) =>
     isEmpty
@@ -71,9 +72,16 @@ export function ChartFrame({
       </section>
 
       {full && (
-        <Modal title={title} size="full" onClose={() => setFull(false)}>
-          <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--ink-600)', marginBottom: 'var(--s5)' }}>{question}</div>
-          {body(Math.round(window.innerHeight * 0.6))}
+        <Modal title={title} size="full" onClose={() => { setFull(false); setZoom(1); }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', marginBottom: 'var(--s4)' }}>
+            <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--ink-600)' }}>{question}</div>
+            <div className="card__tools">
+              <button className="btn" type="button" onClick={() => setZoom(z => Math.max(0.7, +(z - 0.15).toFixed(2)))}>− Zoom</button>
+              <span className="pageno">{Math.round(zoom * 100)}%</span>
+              <button className="btn" type="button" onClick={() => setZoom(z => Math.min(1.6, +(z + 0.15).toFixed(2)))}>+ Zoom</button>
+            </div>
+          </div>
+          {body(Math.round(320 * zoom))}
           {footer}
         </Modal>
       )}

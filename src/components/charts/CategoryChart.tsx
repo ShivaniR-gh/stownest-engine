@@ -11,6 +11,7 @@ export interface CatDatum { key: string; value: number; count: number; rows: Row
 export function CategoryChart({
   data, orientation = 'horizontal', height = 240, valueFormat = formatCompactNum,
   onBarClick, colorIndex = 0, maxBars = 12, showValues = true,
+  valueLabel = 'Value', showCount = false,
 }: {
   data: CatDatum[];
   orientation?: 'horizontal' | 'vertical';
@@ -20,6 +21,8 @@ export function CategoryChart({
   colorIndex?: number;
   maxBars?: number;
   showValues?: boolean;
+  valueLabel?: string;
+  showCount?: boolean;
 }) {
   const [tip, setTip] = useState<{ x: number; y: number; d: CatDatum } | null>(null);
   const rows = data.slice(0, maxBars);
@@ -64,8 +67,8 @@ export function CategoryChart({
         {tip && createPortal(
           <div className="tip ctip" style={{ left: Math.min(tip.x + 14, window.innerWidth - 200), top: tip.y + 12 }}>
             <div className="ctip__hd">{tip.d.key}</div>
-            <div className="ctip__row">Value<span className="ctip__v">{valueFormat(tip.d.value)}</span></div>
-            <div className="ctip__row">Records<span className="ctip__v">{tip.d.count}</span></div>
+            <div className="ctip__row">{valueLabel}<span className="ctip__v">{valueFormat(tip.d.value)}</span></div>
+            {showCount && <div className="ctip__row">Records<span className="ctip__v">{tip.d.count}</span></div>}
             {onBarClick && <div className="ctip__hint">Click to open these records</div>}
           </div>, document.body)}
       </div>
@@ -110,8 +113,8 @@ export function CategoryChart({
       {tip && createPortal(
         <div className="tip ctip" style={{ left: Math.min(tip.x + 14, window.innerWidth - 200), top: tip.y + 12 }}>
           <div className="ctip__hd">{tip.d.key}</div>
-          <div className="ctip__row">Value<span className="ctip__v">{valueFormat(tip.d.value)}</span></div>
-          <div className="ctip__row">Records<span className="ctip__v">{tip.d.count}</span></div>
+          <div className="ctip__row">{valueLabel}<span className="ctip__v">{valueFormat(tip.d.value)}</span></div>
+          {showCount && <div className="ctip__row">Records<span className="ctip__v">{tip.d.count}</span></div>}
         </div>, document.body)}
     </div>
   );

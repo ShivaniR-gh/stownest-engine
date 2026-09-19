@@ -1,25 +1,12 @@
 /* ==========================================================================
    Marketing dashboard.
 
-   Follows the collections treatment: gradient KPI cards with hues fixed per
-   position rather than rotating, so a card added later cannot make Total
-   Leads change colour. The acquisition view needs five, so a fifth hue is
-   defined here rather than in metrics.css — nothing else uses it.
+   KPI cards now use the neutral + accent-border treatment in metrics.css
+   (.grid--kpi-std), same as every other standardized dashboard — the
+   fixed-hue gradient rules and the fifth "teal" hue they needed have been
+   removed rather than left dead.
    ========================================================================== */
 
-:root {
-  --kpi-5a: #0d9488;  --kpi-5b: #0f766e;   /* teal */
-}
-[data-theme='dark'] {
-  --kpi-5a: #0b7268;  --kpi-5b: #0a5f57;
-}
-
-.mk__kpi[data-kpi='1'] { background: linear-gradient(140deg, var(--kpi-1a), var(--kpi-1b)); }
-.mk__kpi[data-kpi='2'] { background: linear-gradient(140deg, var(--kpi-3a), var(--kpi-3b)); }
-.mk__kpi[data-kpi='3'] { background: linear-gradient(140deg, var(--kpi-1a), var(--kpi-1b)); }
-.mk__kpi[data-kpi='4'] { background: linear-gradient(140deg, var(--kpi-4a), var(--kpi-4b)); }
-.mk__kpi[data-kpi='5'] { background: linear-gradient(140deg, var(--kpi-5a), var(--kpi-5b)); }
-.mk__kpi { border-color: transparent; }
 .mk__kpi .metric__value { font-size: var(--fs-2xl); letter-spacing: -.025em; }
 .mk__kpi .metric__cmp { display: flex; align-items: center; gap: var(--s2); flex-wrap: wrap; }
 

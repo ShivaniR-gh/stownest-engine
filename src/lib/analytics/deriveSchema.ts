@@ -213,6 +213,17 @@ export function insights(rows: Row[], schema: DerivedSchema): string[] {
 
 /* -------------------------- derived KPI cards ---------------------------- */
 
+/** Prefixes "Total " onto a column header, unless the header already starts
+ *  with it. Sheet columns are frequently named "Total Space (sqft)" or
+ *  "Total Deliveries" already, and prefixing blindly produced labels like
+ *  "Total Total Space" on the KPI cards. The header is the operator's own
+ *  wording, so it wins — this only adds the word when it is actually
+ *  missing. */
+const totalLabel = (header: string) => {
+  const h = header.trim();
+  return /^total\b/i.test(h) ? h : `Total ${h}`;
+};
+
 const synthetic = (
   id: string, label: string, ds: DatasetDef, formula: string, definition: string,
   requires: string[], format: MetricDef['format'], unit?: string,
@@ -261,7 +272,7 @@ export function deriveKpis(
           goodDirection: dir },
         rows.length ? fn(rows) : null, prevRows.length ? fn(prevRows) : null);
 
-    out.push(mk('capacity', `Total ${cap.header.replace(/\s*\([^)]*\)/, '')}`,
+    out.push(mk('capacity', totalLabel(cap.header.replace(/\s*\([^)]*\)/, '')),
       `SUM(${ds.sheetName}.${cap.sheetColumn})`,
       `Total capacity across every record in view, from the column mapped as capacity.`,
       rs => sumOf(rs, cap), 'int', 'neutral'));
@@ -293,7 +304,7 @@ export function deriveKpis(
   for (const m of schema.measures) {
     const sum = (rs: Row[]) => rs.reduce((a, r) => a + (toNum(r[m.key]) ?? 0), 0);
     out.push(resolved(
-      synthetic(`${ds.id}.sum.${m.key}`, `Total ${m.header}`, ds,
+      synthetic(`${ds.id}.sum.${m.key}`, totalLabel(m.header), ds,
         `SUM(${ds.sheetName}.${m.sheetColumn})`,
         `Sum of the ${m.header} column. StowNest is aggregating a named column, not inferring a business meaning.`,
         [m.key], m.type === 'currency' ? 'inr_compact' : 'int'),
