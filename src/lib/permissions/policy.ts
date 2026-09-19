@@ -1,5 +1,4 @@
-import type { Action, DepartmentId, RoleId } from '@/config/types';
-
+import type { Action, DepartmentId, RoleId } from '../../config/types';
 /** ---------------------------------------------------------------------------
  * Single source of truth for authorisation.
  *
