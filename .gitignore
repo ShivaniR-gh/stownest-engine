@@ -6,3 +6,4 @@ dist
 *.local
 service-account*.json
 .env
+*.zip

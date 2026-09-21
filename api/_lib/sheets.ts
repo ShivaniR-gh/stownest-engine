@@ -1,6 +1,6 @@
 import { JWT } from 'google-auth-library';
-import type { DatasetDef, Row } from '../../src/config/types.js';
-import { HttpError, required } from './env.js';
+import type { DatasetDef, Row } from '../../src/config/types';
+import { HttpError, required } from './env';
 
 /** ---------------------------------------------------------------------------
  * Google Sheets access.
@@ -43,7 +43,35 @@ export function spreadsheetIdFor(ds: Pick<DatasetDef, 'spreadsheetEnv' | 'spread
   return required('SHEETS_SPREADSHEET_ID');                // default workbook
 }
 
+/**
+ * Google answers a burst of reads with 429, and occasionally with a 5xx, for a
+ * few hundred milliseconds. One dashboard opens a dozen datasets at once, so
+ * this happens often enough to be seen as "the page is empty sometimes".
+ *
+ * Reads are retried twice with a short backoff. Writes are NOT retried: a POST
+ * that actually succeeded before the connection broke would be applied twice,
+ * and a duplicate row is worse than an error message.
+ */
+const RETRY_DELAYS_MS = [250, 750];
+
 async function call<T>(sid: string, path: string, init?: RequestInit): Promise<T> {
+  const method = (init?.method ?? 'GET').toUpperCase();
+  const retryable = method === 'GET';
+  let attempt = 0;
+  for (;;) {
+    try {
+      return await callOnce<T>(sid, path, init);
+    } catch (e) {
+      const status = e instanceof HttpError ? e.status : 0;
+      const worthRetry = retryable && (status === 429 || status === 502 || status >= 500);
+      if (!worthRetry || attempt >= RETRY_DELAYS_MS.length) throw e;
+      await new Promise(r => setTimeout(r, RETRY_DELAYS_MS[attempt]));
+      attempt += 1;
+    }
+  }
+}
+
+async function callOnce<T>(sid: string, path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API}/${sid}${path}`, {
     ...init,
     headers: {

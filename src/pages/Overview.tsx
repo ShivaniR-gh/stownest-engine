@@ -8,7 +8,7 @@ import { SectionHeader } from '@/components/metrics/MetricCard';
 import { ChartFrame } from '@/components/charts/ChartFrame';
 import { TrendChart } from '@/components/charts/TrendChart';
 import { Sparkline } from '@/components/charts/Sparkline';
-import { Button, EmptyState, Icon, Skeleton } from '@/components/primitives';
+import { Button, EmptyState, ErrorState, Icon, Skeleton } from '@/components/primitives';
 import { useDatasets } from '@/lib/data/useDataset';
 import { usePermission } from '@/lib/permissions/usePermission';
 import { getDataset } from '@/config/datasets';
@@ -165,8 +165,10 @@ export default function Overview() {
     return ds ? windowTabNames(ds.tabPrefix ?? ds.sheetName, 13).map(t => scopedId(ds.id, t)) : [];
   }, [departments]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const { byId, status } = useDatasets([...wanted, ...facilityIds]);
+  const { byId, status, error, refresh } = useDatasets([...wanted, ...facilityIds]);
   const busy = status === 'loading';
+  /* A failed read must not look like an empty company. */
+  const failed = status === 'error' && !Object.values(byId).some(r => r.length);
 
   const pnl = useMemo(() => byMonth(byId.finance_pnl ?? []), [byId.finance_pnl]);
   const b2c = useMemo(() => byMonth(byId.ct_city_income ?? []), [byId.ct_city_income]);
@@ -464,6 +466,11 @@ export default function Overview() {
 
         {busy && !anything ? (
           <div className="ovw__kpis">{[0, 1, 2, 3, 4, 5].map(i => <Skeleton key={i} h={140} />)}</div>
+        ) : failed ? (
+          <div className="card">
+            <ErrorState title="Could not load your data"
+              body={error?.message ?? 'The data service did not respond.'} onRetry={refresh} />
+          </div>
         ) : !anything ? (
           <div className="card">
             <EmptyState icon="layers" title="No data connected yet"

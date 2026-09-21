@@ -24,7 +24,22 @@ export function useDatasets(ids: string[]) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [key],
   );
-  const snap = useCallback(() => ids.map(i => getEntry(i).fetchedAt).join(','), [key]); // eslint-disable-line react-hooks/exhaustive-deps
+  /**
+   * The snapshot has to change whenever anything the caller renders changes.
+   * It used to be `fetchedAt` alone, which never moves on a FAILED load — the
+   * entry goes loading → error with fetchedAt still null, so no re-render was
+   * scheduled and the page kept its first paint: empty rows and a status of
+   * 'idle'. The dashboard then drew its own "no data" empty state instead of
+   * the error state, which is why a failed or slow read looked like an empty
+   * sheet. Status and row count are part of the snapshot for that reason.
+   */
+  const snap = useCallback(
+    () => ids.map(i => {
+      const e = getEntry(i);
+      return `${e.status}:${e.fetchedAt ?? ''}:${e.rows.length}`;
+    }).join('|'),
+    [key], // eslint-disable-line react-hooks/exhaustive-deps
+  );
   useSyncExternalStore(sub, snap, snap);
 
   useEffect(() => { ids.forEach(i => void load(i)); }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
