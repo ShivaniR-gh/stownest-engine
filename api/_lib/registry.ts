@@ -36,7 +36,12 @@ export const ROLES: SemanticRole[] = [
   'quantity', 'capacity', 'occupied', 'amount', 'cost', 'revenue',
 ];
 
-const TTL = 30_000;
+/* The registry is two reads of the control workbook, repeated on every cold
+ * serverless instance. Thirty seconds meant a dashboard opening five datasets
+ * — five invocations, five cold caches — paid for ten extra Google calls every
+ * time. Five minutes still picks up a new connection well within one working
+ * session, and an admin action calls invalidateRegistry() anyway. */
+const TTL = 5 * 60_000;
 let cache: { at: number; defs: DatasetDef[] } | null = null;
 
 const truthy = (v: unknown) => ['true', 'yes', '1', 'y'].includes(String(v ?? '').trim().toLowerCase());

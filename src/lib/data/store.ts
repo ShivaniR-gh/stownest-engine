@@ -1,5 +1,5 @@
 import type { Row } from '@/config/types';
-import { DataError, type DataAdapter } from './adapter';
+import { DataError, type DataAdapter, type FetchResult } from './adapter';
 import { SheetsAdapter } from './sheetsAdapter';
 
 /** ---------------------------------------------------------------------------
@@ -54,22 +54,37 @@ export const scopedId = (id: string, tab?: string) => (tab ? `${id}::${tab}` : i
  * Returns '' when the dataset has no rows in any tab.
  */
 const latestFilled = new Map<string, Promise<string>>();
-export function latestFilledTab(datasetId: string): Promise<string> {
-  const hit = latestFilled.get(datasetId);
+export function latestFilledTab(datasetId: string, opts: { skipFuture?: boolean } = {}): Promise<string> {
+  const cacheKey = `${datasetId}|${opts.skipFuture ? 'past' : 'any'}`;
+  const hit = latestFilled.get(cacheKey);
   if (hit) return hit;
   const run = (async () => {
     const { tabs = [] } = await adapter.list(datasetId);
-    for (const tab of tabs) {
-      try {
-        const r = await adapter.list(datasetId, { tab });
-        if (r.rows.length > 0) return tab;
-      } catch { /* a tab that does not exist yet is simply empty */ }
-    }
-    return '';
+    const candidates = opts.skipFuture ? tabs.filter(t => !isFutureTab(t)) : tabs;
+    /* Every candidate month is requested AT ONCE, not newest-first one at a
+       time. Walking them sequentially cost one round trip per month and ran
+       on every Facility and Warehouse Space open; requested together they go
+       out as a single batch, and months with no tab are answered from the
+       workbook's tab list without reading anything. */
+    const results = await Promise.all(candidates.map(tab =>
+      batchedList(datasetId, tab).then(r => r.rows.length > 0, () => false)));
+    const i = results.findIndex(Boolean);     // tabs arrive newest first
+    return i >= 0 ? candidates[i] : '';
   })();
-  latestFilled.set(datasetId, run);
-  run.catch(() => latestFilled.delete(datasetId));
+  latestFilled.set(cacheKey, run);
+  run.catch(() => latestFilled.delete(cacheKey));
   return run;
+}
+
+/** "Readings OCT 2026" → is that month after the current one? */
+const MON = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+function isFutureTab(tab: string): boolean {
+  const m = /([A-Z]{3})\s+(\d{4})$/.exec(tab.trim().toUpperCase());
+  if (!m) return false;
+  const i = MON.indexOf(m[1]);
+  if (i < 0) return false;
+  const now = new Date();
+  return new Date(Number(m[2]), i, 1) > new Date(now.getFullYear(), now.getMonth(), 1);
 }
 
 export function unscope(key: string): { id: string; tab?: string } {
@@ -91,6 +106,52 @@ export function subscribe(id: string, fn: () => void): () => void {
   return () => { subs.get(id)?.delete(fn); };
 }
 
+/* ------------------------------- batching -------------------------------
+ * A page asks for its datasets one hook at a time, all within the same render.
+ * Sending each as its own request is what exhausted Google's shared read quota
+ * (about 60 a minute for the whole platform). Reads requested in the same tick
+ * are collected here and sent as ONE /api/data/batch call; the server reads
+ * every tab of a workbook in a single Google request. Each caller still gets
+ * its own promise, and its own error if only its dataset failed. */
+const BATCH_MAX = 40;
+let queue: { datasetId: string; tab?: string; resolve: (r: FetchResult) => void; reject: (e: unknown) => void }[] = [];
+let scheduled = false;
+
+function batchedList(datasetId: string, tab?: string): Promise<FetchResult> {
+  if (!adapter.listMany) return adapter.list(datasetId, { tab });
+  return new Promise((resolve, reject) => {
+    queue.push({ datasetId, tab, resolve, reject });
+    if (!scheduled) {
+      scheduled = true;
+      // A macrotask, not a microtask: sibling components mount in separate
+      // effect passes, and this lets all of them join the same batch.
+      setTimeout(flush, 0);
+    }
+  });
+}
+
+async function flush() {
+  scheduled = false;
+  const pending = queue;
+  queue = [];
+  for (let i = 0; i < pending.length; i += BATCH_MAX) {
+    const chunk = pending.slice(i, i + BATCH_MAX);
+    try {
+      const results = await adapter.listMany!(chunk.map(c => ({ datasetId: c.datasetId, tab: c.tab })));
+      for (const c of chunk) {
+        const r = results.get(c.tab ? `${c.datasetId}::${c.tab}` : c.datasetId);
+        if (!r) c.reject(new Error('No result returned for this dataset.'));
+        else if (r instanceof Error) c.reject(r);
+        else c.resolve(r);
+      }
+    } catch (e) {
+      // The whole batch failed (sign-in, network, server down): every caller
+      // in it gets the same error, which is the truth.
+      for (const c of chunk) c.reject(e);
+    }
+  }
+}
+
 export function load(id: string, opts: { force?: boolean } = {}): Promise<void> {
   const cur = getEntry(id);
   const fresh = cur.fetchedAt !== null && Date.now() - cur.fetchedAt < TTL_MS;
@@ -101,7 +162,7 @@ export function load(id: string, opts: { force?: boolean } = {}): Promise<void> 
 
   const { id: dsId, tab } = unscope(id);
 
-  const p = adapter.list(dsId, { tab })
+  const p = batchedList(dsId, tab)
     .then(res => { set(id, { rows: res.rows, status: 'ready', error: null, fetchedAt: res.fetchedAt || Date.now() }); })
     .catch(err => {
       // Keep whatever rows we already had; mark the entry errored so the UI can

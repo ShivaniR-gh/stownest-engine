@@ -54,6 +54,20 @@ export class SheetsAdapter implements DataAdapter {
       { method: 'GET', signal: opts.signal },
     );
   }
+  async listMany(items: { datasetId: string; tab?: string }[]): Promise<Map<string, FetchResult | DataError>> {
+    const body = { items: items.map(i => ({ dataset: i.datasetId, ...(i.tab ? { tab: i.tab } : {}) })) };
+    const res = await call<{ results: Record<string, FetchResult | { error: string; status: number }> }>(
+      '/data/batch', { method: 'POST', body: JSON.stringify(body) });
+    const out = new Map<string, FetchResult | DataError>();
+    for (const i of items) {
+      const key = i.tab ? `${i.datasetId}::${i.tab}` : i.datasetId;
+      const r = res.results[key];
+      if (!r) out.set(key, new DataError('No result returned for this dataset.', 500));
+      else if ('error' in r) out.set(key, new DataError(r.error, r.status, r.error));
+      else out.set(key, r);
+    }
+    return out;
+  }
   async create(datasetId: string, values: Row, opts: DataOpts = {}): Promise<Row> {
     const r = await call<{ row: Row }>(
       `/data/${encodeURIComponent(datasetId)}${qs({ tab: opts.tab })}`,

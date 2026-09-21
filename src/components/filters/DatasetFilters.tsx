@@ -68,6 +68,10 @@ export function DatasetFilters({
   onChange: (next: ViewFilters) => void;
 }) {
   const [months, setMonths] = useState<string[]>([]);
+  /** Set when the month list could not be read, so the picker says so rather
+   *  than showing "Loading…" for ever. */
+  const [monthsError, setMonthsError] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   const monthly = dataset.tabStrategy === 'monthly';
 
   // The month list is generated and enforced by the server, so it is fetched
@@ -76,6 +80,7 @@ export function DatasetFilters({
   useEffect(() => {
     if (!monthly) return;
     let cancelled = false;
+    setMonthsError(false);
     adapter.list(dataset.id)
       .then(async r => {
         if (cancelled) return;
@@ -87,10 +92,10 @@ export function DatasetFilters({
         const filled = await latestFilledTab(dataset.id).catch(() => '');
         if (!cancelled) onChange({ ...value, month: filled || r.tab || r.tabs?.[0] || '' });
       })
-      .catch(() => { /* the view's own error state covers this */ });
+      .catch(() => { if (!cancelled) setMonthsError(true); });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dataset.id, monthly]);
+  }, [dataset.id, monthly, attempt]);
 
   const cities = useMemo(() => options(rows, 'city'), [rows]);
   const locations = useMemo(
@@ -132,7 +137,9 @@ export function DatasetFilters({
         <label className="filter-bar__field filter-bar__field--month">
           <Icon name="calendar" size={14} />
           <select value={value.month} onChange={e => set({ month: e.target.value })} aria-label="Month">
-            {!months.length && <option value="">Loading…</option>}
+            {!months.length && (
+              <option value="">{monthsError ? 'Could not load months' : 'Loading…'}</option>
+            )}
             {/* Rolling windows are offered only where a window can actually be
                 summed. Space is a snapshot — six months of readings describe
                 the same floor six times — so a capacity dataset gets a plain
@@ -143,6 +150,11 @@ export function DatasetFilters({
             {months.map(m => <option key={m} value={m}>{m.replace(/^\S+\s/, '')}</option>)}
           </select>
         </label>
+      )}
+      {monthly && monthsError && (
+        <Button size="sm" variant="ghost" icon="refresh" onClick={() => setAttempt(a => a + 1)}>
+          Retry
+        </Button>
       )}
 
       <label className="filter-bar__field">

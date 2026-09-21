@@ -5,7 +5,7 @@ import { Button, ConfirmDialog, Icon, Popover } from '@/components/primitives';
 import { DataTable } from './DataTable';
 import { RecordForm } from './RecordForm';
 import { ReadingForm } from './ReadingForm';
-import { adapter, createRow, deleteRow, scopedId, updateRow } from '@/lib/data/store';
+import { adapter, createRow, deleteRow, latestFilledTab, scopedId, updateRow } from '@/lib/data/store';
 import { useScopedRows } from '@/lib/analytics/useMetrics';
 import { applySearch, describePeriod } from '@/lib/analytics/filters';
 import { useAnalytics } from '@/lib/analytics/AnalyticsContext';
@@ -78,20 +78,11 @@ export function DatasetPanel({ dataset, prefilter, month: monthProp, allowCreate
   useEffect(() => {
     if (!monthly) { setOpenTab(''); return; }
     let cancelled = false;
-    (async () => {
-      try {
-        const { tabs = [] } = await adapter.list(dataset.id);
-        for (const tab of tabs) {            // server returns newest first
-          if (isFutureTab(tab)) continue;
-          if (cancelled) return;
-          try {
-            const r = await adapter.list(dataset.id, { tab });
-            if (r.rows.length > 0) { if (!cancelled) setOpenTab(tab); return; }
-          } catch { /* a tab that does not exist yet is simply empty */ }
-        }
-        if (!cancelled) setOpenTab('');
-      } catch { if (!cancelled) setOpenTab(''); }
-    })();
+    /* Shared with the filter bar and the dashboard: one batched lookup per
+       dataset, cached, instead of this panel walking the months itself. */
+    latestFilledTab(dataset.id, { skipFuture: true })
+      .then(t => { if (!cancelled) setOpenTab(t); })
+      .catch(() => { if (!cancelled) setOpenTab(''); });
     return () => { cancelled = true; };
   }, [dataset.id, monthly]);
 
@@ -281,18 +272,4 @@ export function DatasetPanel({ dataset, prefilter, month: monthProp, allowCreate
       )}
     </>
   );
-}
-
-/** "Readings OCT 2026" → is that month after the current one? Tab names come
- *  from api/_lib/months.ts, so the three-letter month is reliable; anything
- *  that does not parse is treated as not-future and handled as normal. */
-const MON = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN',
-  'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
-function isFutureTab(tab: string): boolean {
-  const m = /([A-Z]{3})\s+(\d{4})$/.exec(tab.trim().toUpperCase());
-  if (!m) return false;
-  const i = MON.indexOf(m[1]);
-  if (i < 0) return false;
-  const now = new Date();
-  return new Date(Number(m[2]), i, 1) > new Date(now.getFullYear(), now.getMonth(), 1);
 }

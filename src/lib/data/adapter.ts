@@ -27,6 +27,10 @@ export interface DataOpts { tab?: string; signal?: AbortSignal }
 export interface DataAdapter {
   readonly kind: 'sheets';
   list(datasetId: string, opts?: DataOpts): Promise<FetchResult>;
+  /** Many reads in one round trip. Optional: an adapter without it is simply
+   *  called once per dataset. Each entry resolves or fails on its own. */
+  listMany?(items: { datasetId: string; tab?: string }[]):
+    Promise<Map<string, FetchResult | DataError>>;
   create(datasetId: string, values: Row, opts?: DataOpts): Promise<Row>;
   update(datasetId: string, id: string, values: Row, opts?: DataOpts): Promise<Row>;
   remove(datasetId: string, id: string, opts?: DataOpts): Promise<void>;

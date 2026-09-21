@@ -54,6 +54,29 @@ export function spreadsheetIdFor(ds: Pick<DatasetDef, 'spreadsheetEnv' | 'spread
  */
 const RETRY_DELAYS_MS = [250, 750];
 
+/* ------------------------------ read cache ------------------------------
+ * Sheets allows roughly 60 reads a minute for the service account, and that
+ * quota is SHARED by everyone using the platform. Two people opening Overview
+ * in the same minute used to exhaust it. A warm serverless instance now keeps
+ * each tab's values for a short while, and any write through this module
+ * drops that spreadsheet's entries so nobody reads their own edit stale. */
+const VALUES_TTL_MS = 45_000;
+const valuesCache = new Map<string, { at: number; values: string[][] }>();
+const cacheKey = (sid: string, tab: string) => `${sid}|${tab}`;
+
+function cachedValues(sid: string, tab: string): string[][] | null {
+  const hit = valuesCache.get(cacheKey(sid, tab));
+  if (!hit || Date.now() - hit.at > VALUES_TTL_MS) return null;
+  return hit.values;
+}
+function rememberValues(sid: string, tab: string, values: string[][]) {
+  valuesCache.set(cacheKey(sid, tab), { at: Date.now(), values });
+}
+/** Any write to a workbook invalidates every cached tab of that workbook. */
+export function forgetSpreadsheet(sid: string) {
+  for (const k of valuesCache.keys()) if (k.startsWith(`${sid}|`)) valuesCache.delete(k);
+}
+
 async function call<T>(sid: string, path: string, init?: RequestInit): Promise<T> {
   const method = (init?.method ?? 'GET').toUpperCase();
   const retryable = method === 'GET';
@@ -72,6 +95,7 @@ async function call<T>(sid: string, path: string, init?: RequestInit): Promise<T
 }
 
 async function callOnce<T>(sid: string, path: string, init?: RequestInit): Promise<T> {
+  if ((init?.method ?? 'GET').toUpperCase() !== 'GET') forgetSpreadsheet(sid);
   const res = await fetch(`${API}/${sid}${path}`, {
     ...init,
     headers: {
@@ -85,6 +109,11 @@ async function callOnce<T>(sid: string, path: string, init?: RequestInit): Promi
     if (res.status === 403) throw new HttpError(500, 'The service account cannot open this spreadsheet. Share the sheet with it as an Editor.');
     if (res.status === 404) throw new HttpError(500, `Spreadsheet ${sid.slice(0, 8)}… or the tab was not found. Check the id and tab names.`);
     if (res.status === 429) throw new HttpError(429, 'Google is rate-limiting requests to this spreadsheet.');
+    // Google answers a range naming a tab that does not exist with 400 "Unable
+    // to parse range". It must stay a 400: relabelled as 502 it was retried
+    // twice and then surfaced as a server error, instead of being recognised
+    // as "no tab for that month yet".
+    if (res.status === 400) throw new HttpError(400, `Sheets rejected the request: ${body.slice(0, 200)}`);
     console.error("[sheets 502]", res.status, body.slice(0, 500));
     throw new HttpError(502, `Sheets API error ${res.status}: ${body.slice(0, 200)}`);
   }
@@ -162,11 +191,127 @@ export interface SheetRead { rows: Row[]; unmappedSourceColumns: string[]; fetch
  */
 export async function readDataset(ds: DatasetDef, tabName?: string): Promise<SheetRead> {
   const sid = spreadsheetIdFor(ds);
-  const tab = await resolveTab(sid, tabName ?? ds.sheetName);
-  const res = await call<{ values?: string[][] }>(sid,
-    `/values/${encodeURIComponent(quoteSheetNameForA1(tab))}?majorDimension=ROWS&valueRenderOption=UNFORMATTED_VALUE`);
+  const wanted = String(tabName ?? ds.sheetName);
 
-  const values = res.values ?? [];
+  /* Read the values FIRST and only resolve the tab name if that fails.
+   *
+   * resolveTab exists for tabs whose case or spacing drifts from config, and
+   * it costs a full spreadsheet-metadata call. Paying it on every read doubled
+   * the Google round trips per dataset, and a dashboard opens five datasets at
+   * once on a cold serverless instance with an empty metadata cache. The name
+   * matches exactly in the overwhelming majority of reads, so the slow path is
+   * now the exception rather than the rule. */
+  let tab = wanted;
+  const hit = cachedValues(sid, wanted);
+  if (hit) return projectValues(ds, hit);
+  let res: { values?: string[][] };
+  try {
+    res = await call<{ values?: string[][] }>(sid,
+      `/values/${encodeURIComponent(quoteSheetNameForA1(wanted))}?majorDimension=ROWS&valueRenderOption=UNFORMATTED_VALUE`);
+  } catch (e) {
+    // 400/404 here means "no tab by that exact name" — fall back to matching
+    // it case- and whitespace-insensitively, which reports a clear error when
+    // the tab genuinely does not exist.
+    const status = e instanceof HttpError ? e.status : 0;
+    if (status === 429 || status === 403) throw e;   // quota / access: say so
+    tab = await resolveTab(sid, wanted);              // 404 when the tab is missing
+    res = await call<{ values?: string[][] }>(sid,
+      `/values/${encodeURIComponent(quoteSheetNameForA1(tab))}?majorDimension=ROWS&valueRenderOption=UNFORMATTED_VALUE`);
+  }
+
+  rememberValues(sid, wanted, res.values ?? []);
+  if (tab !== wanted) rememberValues(sid, tab, res.values ?? []);
+  return projectValues(ds, res.values ?? []);
+}
+
+/**
+ * Reads many tabs in as few Google calls as possible.
+ *
+ * Tabs in the same workbook are fetched with ONE values:batchGet instead of one
+ * request each — a dashboard that used to cost a dozen reads now costs one or
+ * two, which is what keeps the platform inside the shared quota.
+ *
+ * batchGet is all-or-nothing: a single range naming a tab that does not exist
+ * fails the whole call. When that happens the workbook's tabs are read one at
+ * a time instead, so one missing month cannot blank a whole dashboard.
+ */
+export async function readDatasetsBatch(
+  items: { key: string; ds: DatasetDef; tab: string }[],
+): Promise<Map<string, SheetRead | { error: string; status: number }>> {
+  const out = new Map<string, SheetRead | { error: string; status: number }>();
+
+  const bySheet = new Map<string, { key: string; ds: DatasetDef; tab: string }[]>();
+  for (const it of items) {
+    const sid = spreadsheetIdFor(it.ds);
+    const hit = cachedValues(sid, it.tab);
+    if (hit) { out.set(it.key, projectValues(it.ds, hit)); continue; }
+    if (!bySheet.has(sid)) bySheet.set(sid, []);
+    bySheet.get(sid)!.push(it);
+  }
+
+  await Promise.all([...bySheet.entries()].map(async ([sid, requested]) => {
+    /* batchGet is all-or-nothing: ONE range naming a tab that does not exist
+       fails every range in the call. Monthly datasets routinely ask for months
+       whose tab was never created (a year of history on a sheet started in
+       April), so asking blindly sent almost every Facility and Operations load
+       down the slow one-at-a-time path.
+
+       The workbook's tab list is read first — one call, cached per instance —
+       and months with no tab are answered as empty straight away. Only tabs
+       that exist go into the batch, so it no longer fails on them. */
+    let meta: Record<string, number> = {};
+    try { meta = await loadSheetMeta(sid); } catch { /* fall through to the batch */ }
+    const existing = new Map<string, string>();   // requested name → real tab name
+    const byNorm = new Map(Object.keys(meta).map(t => [normalizeTabName(t), t]));
+    const group: typeof requested = [];
+    for (const g of requested) {
+      const real = meta[g.tab] !== undefined ? g.tab : byNorm.get(normalizeTabName(g.tab));
+      if (Object.keys(meta).length && !real) {
+        out.set(g.key, { rows: [], unmappedSourceColumns: [], fetchedAt: Date.now() });
+        continue;
+      }
+      existing.set(g.tab, real ?? g.tab);
+      group.push(g);
+    }
+    if (!group.length) return;
+
+    const tabs = [...new Set(group.map(g => existing.get(g.tab) ?? g.tab))];
+    try {
+      const qs = tabs.map(t => `ranges=${encodeURIComponent(quoteSheetNameForA1(t))}`).join('&');
+      const res = await call<{ valueRanges?: { values?: string[][] }[] }>(sid,
+        `/values:batchGet?${qs}&majorDimension=ROWS&valueRenderOption=UNFORMATTED_VALUE`);
+      const byTab = new Map<string, string[][]>();
+      tabs.forEach((t, i) => {
+        const values = res.valueRanges?.[i]?.values ?? [];
+        byTab.set(t, values);
+        rememberValues(sid, t, values);
+      });
+      for (const g of group) {
+        out.set(g.key, projectValues(g.ds, byTab.get(existing.get(g.tab) ?? g.tab) ?? []));
+      }
+    } catch {
+      // One bad range fails the batch — fall back to individual reads, one at
+      // a time so the fallback itself does not trip the rate limit.
+      for (const g of group) {
+        try {
+          out.set(g.key, await readDataset(g.ds, g.tab));
+        } catch (e) {
+          const status = e instanceof HttpError ? e.status : 500;
+          // A month with no tab yet is an empty month, not an error.
+          if (status === 404) out.set(g.key, { rows: [], unmappedSourceColumns: [], fetchedAt: Date.now() });
+          else out.set(g.key, { error: e instanceof Error ? e.message : 'Read failed.', status });
+        }
+      }
+    }
+  }));
+
+  return out;
+}
+
+/** Turns raw sheet values (header row first) into rows keyed by the dataset's
+ *  column keys. Shared by the single and the batched readers so both produce
+ *  exactly the same shape. */
+export function projectValues(ds: DatasetDef, values: string[][]): SheetRead {
   if (!values.length) return { rows: [], unmappedSourceColumns: [], fetchedAt: Date.now() };
 
   const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ');

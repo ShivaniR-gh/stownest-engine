@@ -12,6 +12,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { readFileSync } from 'node:fs';
 import sessionHandler from '../api/auth/session';
 import dataHandler from '../api/data/[dataset]';
+import batchHandler from '../api/data/batch';
 import configDatasetsHandler from '../api/config/datasets';
 import configSourcesHandler from '../api/config/sources';
 import configDepartmentsHandler from '../api/config/departments';
@@ -87,6 +88,14 @@ createServer(async (req, res) => {
       const { vreq, vres } = adapt(req, res, query, body);
       await configSourcesHandler(vreq as never, vres as never);
       return log(res.statusCode);
+    }
+
+    // Must come before the [dataset] pattern below, which would otherwise
+    // treat "batch" as a dataset id — Vercel prefers the static file too.
+    if (url.pathname === '/api/data/batch') {
+      const { vreq, vres } = adapt(req, res, query, body);
+      await batchHandler(vreq as never, vres as never);
+      return log(res.statusCode, 'batch');
     }
 
     const m = url.pathname.match(/^\/api\/data\/([^/]+)$/);
