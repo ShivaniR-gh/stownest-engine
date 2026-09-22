@@ -83,3 +83,13 @@
 .heat__scale { display: flex; align-items: center; gap: 6px; margin-top: var(--s3); font-size: var(--fs-micro); color: var(--ink-400); }
 .heat__ramp { display: flex; gap: 1px; }
 .heat__ramp i { width: 16px; height: 8px; display: block; }
+/* Chart-type dropdown in a ChartFrame header. Quiet until someone moves it
+   off Default, then accent-coloured so a non-default view is obvious. */
+.chartkind {
+  font: inherit; font-size: 12px; color: var(--ink-600);
+  background: transparent; border: 1px solid var(--line); border-radius: 6px;
+  padding: 2px 6px; height: 26px; cursor: pointer; max-width: 128px;
+}
+.chartkind:hover { border-color: var(--ink-300); color: var(--ink-900); }
+.chartkind:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.chartkind[data-on] { color: var(--accent); border-color: var(--accent); }

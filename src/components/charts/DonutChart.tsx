@@ -11,7 +11,7 @@ export interface Slice { key: string; value: number; count: number; rows: Row[] 
  * CategoryChart instead.
  */
 export function DonutChart({
-  data, total, height = 200, valueFormat = formatCompactNum, onSliceClick, centerLabel = 'Total', maxSlices = 7,
+  data, total, height = 200, valueFormat = formatCompactNum, onSliceClick, centerLabel = 'Total', maxSlices = 7, showTotal = true,
 }: {
   data: Slice[];
   total?: number;
@@ -20,6 +20,9 @@ export function DonutChart({
   onSliceClick?: (s: Slice) => void;
   centerLabel?: string;
   maxSlices?: number;
+  /** False when slices are ratios that do not sum to anything meaningful:
+   *  the centre then shows the slice count instead of a total. */
+  showTotal?: boolean;
 }) {
   const [hidden, setHidden] = useState<Set<string>>(new Set());
   const [hover, setHover] = useState<string | null>(null);
@@ -61,7 +64,7 @@ export function DonutChart({
           </path>
         ))}
         <text className="donut__center donut__total" x={cx} y={cy - 1}>
-          {hover ? valueFormat(live.find(s => s.key === hover)?.value ?? 0) : valueFormat(shown)}
+          {hover ? valueFormat(live.find(s => s.key === hover)?.value ?? 0) : showTotal ? valueFormat(shown) : live.length}
         </text>
         <text className="donut__center donut__lb" x={cx} y={cy + 15}>
           {hover ? (hover.length > 16 ? `${hover.slice(0, 15)}…` : hover) : centerLabel}
