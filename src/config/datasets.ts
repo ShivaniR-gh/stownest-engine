@@ -988,7 +988,7 @@ export const DATASETS: DatasetDef[] = [
    * ------------------------------------------------------------------ */
   {
     id: 'warehouse_readings',
-    label: 'Warehouse Space',
+    label: 'Warehouse Space Utilization',
     noun: 'reading',
     department: 'facility',
     /* The ops report carries a space block that is this dataset. Surfacing it
