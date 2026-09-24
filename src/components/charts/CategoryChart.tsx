@@ -2,13 +2,16 @@ import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { Row } from '@/config/types';
 import { formatCompactNum } from '@/lib/format';
-import { niceTicks, scaleY, seriesColor } from './util';
+import { formatTick, niceTicks, scaleY, seriesColor } from './util';
+import { TrendChartBase } from './TrendChart';
+import { DonutChartBase } from './DonutChart';
+import { AsDesigned, isPercentFormat, shortLabel, useChartKind } from './chartKind';
 
 export interface CatDatum { key: string; value: number; count: number; rows: Row[] }
 
 /** Comparison across categories. Horizontal is the default because category
  *  names are words — rotated 45° labels are a design failure, not a style. */
-export function CategoryChart({
+export function CategoryChartBase({
   data, orientation = 'horizontal', height = 240, valueFormat = formatCompactNum,
   onBarClick, colorIndex = 0, maxBars = 12, showValues = true,
   valueLabel = 'Value', showCount = false,
@@ -90,7 +93,7 @@ export function CategoryChart({
             {ticks.map(t => <line key={t} x1={0} x2={iw} y1={scaleY(t, 0, yMax, ih)} y2={scaleY(t, 0, yMax, ih)} />)}
           </g>
           <g className="chart__axis">
-            {ticks.map(t => <text key={t} x={-8} y={scaleY(t, 0, yMax, ih) + 3.5} textAnchor="end">{formatCompactNum(t)}</text>)}
+            {ticks.map(t => <text key={t} x={-8} y={scaleY(t, 0, yMax, ih) + 3.5} textAnchor="end">{formatTick(t, ticks, formatCompactNum)}</text>)}
             <line x1={0} x2={iw} y1={ih} y2={ih} />
           </g>
           {rows.map((d, i) => {
@@ -121,7 +124,7 @@ export function CategoryChart({
 }
 
 /** Stacked bars for composition-over-time. */
-export function StackedBarChart({
+export function StackedBarChartBase({
   data, keys, labels, height = 240, valueFormat = formatCompactNum, onBarClick,
 }: {
   data: { key: string; label: string; values: Record<string, number>; rows: Row[] }[];
@@ -148,7 +151,7 @@ export function StackedBarChart({
             {ticks.map(t => <line key={t} x1={0} x2={iw} y1={scaleY(t, 0, yMax, ih)} y2={scaleY(t, 0, yMax, ih)} />)}
           </g>
           <g className="chart__axis">
-            {ticks.map(t => <text key={t} x={-8} y={scaleY(t, 0, yMax, ih) + 3.5} textAnchor="end">{formatCompactNum(t)}</text>)}
+            {ticks.map(t => <text key={t} x={-8} y={scaleY(t, 0, yMax, ih) + 3.5} textAnchor="end">{formatTick(t, ticks, formatCompactNum)}</text>)}
             {data.map((d, i) => {
               const every = Math.ceil(data.length / 12);
               return i % every === 0 || i === data.length - 1
@@ -196,5 +199,71 @@ export function StackedBarChart({
         ))}
       </div>
     </div>
+  );
+}
+
+type CatProps = Parameters<typeof CategoryChartBase>[0];
+
+/** CategoryChart as placed on a page; follows the page's chart type. */
+export function CategoryChart(props: CatProps) {
+  const kind = useChartKind();
+  const { data, height = 240, valueFormat = formatCompactNum, onBarClick, colorIndex = 0,
+    maxBars = 12, valueLabel = 'Value' } = props;
+
+  if (kind === 'default') return <CategoryChartBase {...props} />;
+  if (kind === 'hbar') return <CategoryChartBase {...props} orientation="horizontal" />;
+  if (kind === 'bar') return <CategoryChartBase {...props} orientation="vertical" />;
+
+  const byKey = new Map(data.map(d => [d.key, d]));
+  if (kind === 'line' || kind === 'area') {
+    return (
+      <AsDesigned>
+        <TrendChartBase height={height} valueFormat={valueFormat} legendStat="none"
+          data={data.slice(0, maxBars).map(d => ({ key: d.key, label: shortLabel(d.key), values: { v: d.value }, rows: d.rows }))}
+          series={[{ id: 'v', label: valueLabel, kind, colorIndex }]}
+          onPointClick={onBarClick ? p => { const d = byKey.get(p.key); if (d) onBarClick(d); } : undefined} />
+      </AsDesigned>
+    );
+  }
+  const showTotal = !isPercentFormat(valueFormat);
+  return (
+    <AsDesigned>
+      <DonutChartBase height={Math.min(height, 220)} valueFormat={valueFormat} maxSlices={12}
+        showTotal={showTotal} centerLabel={showTotal ? valueLabel : 'items'}
+        data={data.filter(d => d.value > 0)}
+        onSliceClick={onBarClick} />
+    </AsDesigned>
+  );
+}
+
+type StackProps = Parameters<typeof StackedBarChartBase>[0];
+
+/** StackedBarChart as placed on a page; follows the page's chart type.
+ *  Horizontal bar has no stacked form here, so it stays stacked columns. */
+export function StackedBarChart(props: StackProps) {
+  const kind = useChartKind();
+  const { data, keys, labels, height = 240, valueFormat = formatCompactNum, onBarClick } = props;
+  if (kind === 'default' || kind === 'bar' || kind === 'hbar') return <StackedBarChartBase {...props} />;
+
+  if (kind === 'line' || kind === 'area') {
+    return (
+      <AsDesigned>
+        <TrendChartBase height={height} valueFormat={valueFormat} data={data}
+          series={keys.map((k, i) => ({ id: k, label: labels[k] ?? k, kind, colorIndex: i }))}
+          onPointClick={onBarClick ? p => onBarClick({ rows: p.rows, label: p.label }) : undefined} />
+      </AsDesigned>
+    );
+  }
+  const allRows = data.flatMap(d => d.rows);
+  const slices = keys.map(k => ({
+    key: labels[k] ?? k, value: data.reduce((a, d) => a + (d.values[k] ?? 0), 0),
+    count: allRows.length, rows: allRows,
+  })).filter(sl => sl.value > 0);
+  return (
+    <AsDesigned>
+      <DonutChartBase height={Math.min(height, 220)} valueFormat={valueFormat} maxSlices={12}
+        showTotal={!isPercentFormat(valueFormat)} centerLabel="Total" data={slices}
+        onSliceClick={onBarClick ? sl => onBarClick({ rows: sl.rows, label: sl.key }) : undefined} />
+    </AsDesigned>
   );
 }

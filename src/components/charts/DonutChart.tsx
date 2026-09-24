@@ -2,6 +2,9 @@ import { useState } from 'react';
 import type { Row } from '@/config/types';
 import { formatCompactNum } from '@/lib/format';
 import { arcPath, seriesColor } from './util';
+import { TrendChartBase } from './TrendChart';
+import { CategoryChartBase } from './CategoryChart';
+import { AsDesigned, shortLabel, useChartKind } from './chartKind';
 
 export interface Slice { key: string; value: number; count: number; rows: Row[] }
 
@@ -10,7 +13,7 @@ export interface Slice { key: string; value: number; count: number; rows: Row[] 
  * are more than about seven of them, this is the wrong chart — use
  * CategoryChart instead.
  */
-export function DonutChart({
+export function DonutChartBase({
   data, total, height = 200, valueFormat = formatCompactNum, onSliceClick, centerLabel = 'Total', maxSlices = 7, showTotal = true,
 }: {
   data: Slice[];
@@ -89,5 +92,36 @@ export function DonutChart({
         })}
       </div>
     </div>
+  );
+}
+
+type DonutProps = Parameters<typeof DonutChartBase>[0];
+
+/** DonutChart as placed on a page; follows the page's chart type. */
+export function DonutChart(props: DonutProps) {
+  const kind = useChartKind();
+  if (kind === 'default' || kind === 'pie') return <DonutChartBase {...props} />;
+
+  const { data, height = 200, valueFormat = formatCompactNum, onSliceClick, centerLabel = 'Total' } = props;
+  const h = Math.max(height, 200);
+  const sorted = [...data].sort((a, b) => b.value - a.value);
+
+  if (kind === 'bar' || kind === 'hbar') {
+    return (
+      <AsDesigned>
+        <CategoryChartBase height={h} orientation={kind === 'bar' ? 'vertical' : 'horizontal'}
+          valueFormat={valueFormat} valueLabel={centerLabel} maxBars={12}
+          data={sorted} onBarClick={onSliceClick} />
+      </AsDesigned>
+    );
+  }
+  const byKey = new Map(data.map(d => [d.key, d]));
+  return (
+    <AsDesigned>
+      <TrendChartBase height={h} valueFormat={valueFormat} legendStat="none"
+        data={sorted.slice(0, 12).map(d => ({ key: d.key, label: shortLabel(d.key), values: { v: d.value }, rows: d.rows }))}
+        series={[{ id: 'v', label: centerLabel, kind, colorIndex: 0 }]}
+        onPointClick={onSliceClick ? p => { const d = byKey.get(p.key); if (d) onSliceClick(d); } : undefined} />
+    </AsDesigned>
   );
 }

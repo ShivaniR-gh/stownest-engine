@@ -11,6 +11,7 @@ import type { SeriesPoint } from '@/lib/analytics/aggregate';
 import { PeriodSelect } from '@/components/filters/PeriodSelect';
 import { SelectField } from '@/components/filters/SelectField';
 import { defaultMonthPeriod } from '@/lib/analytics/monthWindow';
+import { ChartsHeading } from '@/components/charts/chartKind';
 
 const B2BSalesDashboard = lazy(() =>
   import('@/components/metrics/B2BSalesDashboard').then(m => ({ default: m.B2BSalesDashboard })),
@@ -410,6 +411,7 @@ function B2BAccountsDashboard({ rows }: { rows: Record<string, Row[]> }) {
       </section>
 
       <section className="section">
+        <ChartsHeading />
         <div className="grid" style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 16 }}>
           <ChartFrame title="Revenue growth trend" question="How is booked revenue moving month to month?" height={h}
             isEmpty={!trend.some(p => p.values.revenue)}>

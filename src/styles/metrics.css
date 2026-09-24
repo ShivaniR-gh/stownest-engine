@@ -399,3 +399,22 @@
   line-height: 1.45;
 }
 .grid--kpi-std .metric__cmp .mk__note { display: inline; }
+/* ==========================================================================
+   Facility capacity row — seven compact tiles on one line.
+   Smaller padding, value and icon chip than the standard tile so Total,
+   Occupied, Available, Utilisation and the three customer/churn figures fit
+   side by side. Stays one row on a laptop screen (≈1230px wide, sidebar open);
+   steps down to 4 and then 2 per row only on genuinely narrow windows.
+   ========================================================================== */
+.grid.cap-kpis { grid-template-columns: repeat(7, minmax(0, 1fr)); gap: var(--s3); }
+.cap-kpis.grid--kpi-std .metric { padding: 12px 14px 12px; min-height: 0; }
+.cap-kpis .metric__value { font-size: clamp(17px, 1.45vw, 24px); letter-spacing: -.03em; }
+.cap-kpis .metric__label { font-size: 10px; letter-spacing: .04em; white-space: normal; line-height: 1.25; }
+.cap-kpis .kpi2__hd { gap: 6px; margin-bottom: 6px; min-height: 26px; }
+.cap-kpis .kpi2__chip { width: 22px; height: 22px; flex-basis: 22px; }
+.cap-kpis .kpi2__chip svg { width: 12px; height: 12px; }
+.cap-kpis .metric__cmp { font-size: 11px; margin-top: 4px; white-space: normal; line-height: 1.3; }
+.cap-kpis .kpi2__spark { margin: auto -14px -12px; padding-top: 8px; }
+.cap-kpis .kpi2__spark svg { height: 24px; }
+@media (max-width: 1000px) { .grid.cap-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@media (max-width: 640px)  { .grid.cap-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

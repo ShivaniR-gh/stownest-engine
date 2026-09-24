@@ -11,6 +11,7 @@ import type { SeriesPoint } from '@/lib/analytics/aggregate';
 import { PeriodSelect } from '@/components/filters/PeriodSelect';
 import { SelectField } from '@/components/filters/SelectField';
 import { defaultMonthPeriod } from '@/lib/analytics/monthWindow';
+import { ChartsHeading } from '@/components/charts/chartKind';
 
 const n = (r: Row | undefined, k: string) => (r ? toNum(r[k]) ?? 0 : 0);
 const monthKey = (v: unknown) => {
@@ -264,6 +265,7 @@ export function B2BSalesDashboard({ rows }: { rows: Record<string, Row[]> }) {
       </section>
 
       <section className="section">
+        <ChartsHeading />
         <div className="grid" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 16 }}>
           <ChartFrame title="Lead generation" question="Are leads increasing or decreasing?" height={h}
             isEmpty={trend.length < 1}>

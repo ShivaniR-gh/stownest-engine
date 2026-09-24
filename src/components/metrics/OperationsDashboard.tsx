@@ -11,6 +11,7 @@ import { formatInt, formatPct, parseDate, toNum } from '@/lib/format';
 import { keysInWindow, defaultMonthPeriod } from '@/lib/analytics/monthWindow';
 import { PeriodSelect } from '@/components/filters/PeriodSelect';
 import { KpiTile } from '@/components/metrics/KpiTile';
+import { ChartKindSwitch } from '@/components/charts/chartKind';
 
 /** ---------------------------------------------------------------------------
  * Operations dashboard.
@@ -218,7 +219,7 @@ export function OperationsDashboard({ rows, activeDatasetId }: {
       </section>
 
       <section className="section">
-        <SectionHeader title="Analysis" />
+        <SectionHeader title="Analysis" action={<ChartKindSwitch />} />
         <div className="grid grid--split">
           <ChartFrame title="Month on month" department="operations"
             question="Is throughput holding, and is the mix shifting?"

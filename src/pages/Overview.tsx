@@ -17,6 +17,7 @@ import { tabMonthDate, windowTabNames } from '@/lib/analytics/monthWindow';
 import { activeDepartments } from '@/config/departments';
 import { formatINRCompact, formatInt, formatPct, parseDate, toNum } from '@/lib/format';
 import type { Row } from '@/config/types';
+import { ChartKindProvider, ChartsHeading } from '@/components/charts/chartKind';
 
 /** ---------------------------------------------------------------------------
  * Overview — the company on one page.
@@ -635,6 +636,8 @@ export default function Overview() {
               </div>
             </section>
 
+            <ChartKindProvider scope="overview">
+            <ChartsHeading title="Trends" />
             <div className="ovw__charts">
               {show('finance') && (
               <ChartFrame title="Revenue trend" height={220}
@@ -687,6 +690,7 @@ export default function Overview() {
               </ChartFrame>
               )}
             </div>
+            </ChartKindProvider>
 
             <div className="ovw__tables">
               {show('finance') && services.length > 0 && (

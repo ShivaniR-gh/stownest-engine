@@ -3,8 +3,11 @@ import { createPortal } from 'react-dom';
 import type { Row } from '@/config/types';
 import type { SeriesPoint } from '@/lib/analytics/aggregate';
 import { formatCompactNum } from '@/lib/format';
-import { areaPath, linePath, niceTicks, scaleY, seriesColor } from './util';
+import { areaPath, formatTick, linePath, niceTicks, scaleY, seriesColor } from './util';
 import { ChartLegend } from './ChartFrame';
+import { CategoryChartBase } from './CategoryChart';
+import { DonutChartBase } from './DonutChart';
+import { AsDesigned, isPercentFormat, useChartKind } from './chartKind';
 
 export interface TrendSeries {
   id: string;
@@ -23,7 +26,7 @@ export interface TrendSeries {
  * at the same bucket are compared at a glance; clicking a bucket hands the
  * underlying rows back for drill-down.
  */
-export function TrendChart({
+export function TrendChartBase({
   data, series, height = 240, onPointClick, valueFormat = formatCompactNum, smooth = false,
   legendStat = 'sum',
 }: {
@@ -111,10 +114,10 @@ export function TrendChart({
           </g>
           <g className="chart__axis">
             {leftTicks.map(t => (
-              <text key={t} x={-8} y={scaleY(t, 0, lMax, ih) + 3.5} textAnchor="end">{formatCompactNum(t)}</text>
+              <text key={t} x={-8} y={scaleY(t, 0, lMax, ih) + 3.5} textAnchor="end">{formatTick(t, leftTicks, formatCompactNum)}</text>
             ))}
             {hasRight && rightTicks.map(t => (
-              <text key={t} x={iw + 8} y={scaleY(t, 0, rMax, ih) + 3.5} textAnchor="start">{formatCompactNum(t)}</text>
+              <text key={t} x={iw + 8} y={scaleY(t, 0, rMax, ih) + 3.5} textAnchor="start">{formatTick(t, rightTicks, formatCompactNum)}</text>
             ))}
             {data.map((d, i) => {
               const every = data.length <= 14 ? 1 : Math.ceil(data.length / 12);
@@ -200,3 +203,74 @@ export function TrendChart({
 }
 
 export type { Row };
+
+type TrendProps = Parameters<typeof TrendChartBase>[0] & {
+  /** Pie only: whether the centre may show a total. Defaults to yes unless the
+   *  series is a percentage or an average, where a total means nothing. */
+  pieTotal?: boolean;
+};
+
+/**
+ * TrendChart as placed on a page. Draws as designed unless the page's chart
+ * type says otherwise, then re-plots the same points in that form.
+ */
+export function TrendChart({ pieTotal, ...props }: TrendProps) {
+  const kind = useChartKind();
+  if (kind === 'default') return <TrendChartBase {...props} />;
+
+  const { data, series, height = 240, onPointClick, valueFormat = formatCompactNum, legendStat = 'sum' } = props;
+  const additive = pieTotal ?? (legendStat !== 'avg' && !isPercentFormat(valueFormat));
+  const mixedAxes = series.some(s => s.axis === 'right');
+  const allBars = <TrendChartBase {...props} series={series.map(s => ({ ...s, kind: 'bar' as const }))} />;
+
+  if (kind === 'bar' || kind === 'line' || kind === 'area') {
+    return <TrendChartBase {...props} series={series.map(s => ({ ...s, kind }))} />;
+  }
+
+  const one = series.length === 1 ? series[0] : null;
+  const byLabel = new Map(data.map(p => [p.label, p]));
+
+  if (kind === 'hbar') {
+    if (!one) return allBars;               // several series: grouped bars read best
+    return (
+      <AsDesigned>
+        <CategoryChartBase height={height} orientation="horizontal" maxBars={24}
+          valueFormat={one.format ?? valueFormat} valueLabel={one.label} colorIndex={one.colorIndex ?? 0}
+          data={data.map(p => ({ key: p.label, value: p.values[one.id] ?? 0, count: p.rows.length, rows: p.rows }))}
+          onBarClick={onPointClick ? d => { const p = byLabel.get(d.key); if (p) onPointClick(p); } : undefined} />
+      </AsDesigned>
+    );
+  }
+
+  // pie
+  if (one) {
+    const fmt = one.format ?? valueFormat;
+    const showTotal = additive && !isPercentFormat(fmt);
+    return (
+      <AsDesigned>
+        <DonutChartBase height={Math.min(height, 220)} valueFormat={fmt} maxSlices={12}
+          showTotal={showTotal} centerLabel={showTotal ? one.label : 'periods'}
+          data={data.filter(p => (p.values[one.id] ?? 0) > 0)
+            .map(p => ({ key: p.label, value: p.values[one.id] ?? 0, count: p.rows.length, rows: p.rows }))}
+          onSliceClick={onPointClick ? sl => { const p = byLabel.get(sl.key); if (p) onPointClick(p); } : undefined} />
+      </AsDesigned>
+    );
+  }
+  // Several series share a pie only when they are amounts in one unit: then
+  // each slice is that series' total for the period.
+  if (!additive || mixedAxes) return allBars;
+  const allRows = data.flatMap(p => p.rows);
+  const slices = series.map(s => ({
+    key: s.label, value: data.reduce((a, p) => a + (p.values[s.id] ?? 0), 0),
+    count: allRows.length, rows: allRows, id: s.id,
+  })).filter(sl => sl.value > 0);
+  return (
+    <AsDesigned>
+      <DonutChartBase height={Math.min(height, 220)} valueFormat={valueFormat} maxSlices={12}
+        centerLabel="Total" data={slices}
+        onSliceClick={onPointClick ? sl => onPointClick({
+          key: sl.key, label: sl.key, values: { [sl.key]: sl.value }, rows: sl.rows,
+        }) : undefined} />
+    </AsDesigned>
+  );
+}

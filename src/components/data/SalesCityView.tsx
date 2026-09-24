@@ -16,6 +16,7 @@ import { WINDOW_PRESETS, keysInWindow, defaultMonthPeriod, ytdOptions } from '@/
 import { PeriodSelect } from '@/components/filters/PeriodSelect';
 import { isRowOpen } from '@/lib/data/editable';
 import { Button, Icon, Popover } from '@/components/primitives';
+import { ChartKindSwitch } from '@/components/charts/chartKind';
 
 /** ---------------------------------------------------------------------------
  * Sales by city.
@@ -424,7 +425,7 @@ export function SalesCityView({ rows, label, datasetId, variant = 'records', onE
 
       {dash && (
         <section className="section">
-          <SectionHeader title="Analysis" />
+          <SectionHeader title="Analysis" action={<ChartKindSwitch />} />
 
           <div>
             {/* One month of data has no mix to shift, and a lone stacked

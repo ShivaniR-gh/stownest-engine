@@ -7,9 +7,6 @@ import { ChartFrame } from '@/components/charts/ChartFrame';
 import { TrendChart } from '@/components/charts/TrendChart';
 import { CategoryChart } from '@/components/charts/CategoryChart';
 import { Sparkline } from '@/components/charts/Sparkline';
-import {
-  ChartKindSelect, SwitchableChart, useChartKinds, type SwitchDatum,
-} from '@/components/charts/SwitchableChart';
 import { DrillDown } from '@/components/data/DrillDown';
 import {
   BAND_LABEL, BAND_TONE, band, bandDistribution,
@@ -20,6 +17,7 @@ import { useAnalytics } from '@/lib/analytics/AnalyticsContext';
 import { tabMonthDate } from '@/lib/analytics/monthWindow';
 import { formatCompactNum, formatInt, formatPct, parseDate, toNum } from '@/lib/format';
 import type { ColumnDef, DatasetDef, Row } from '@/config/types';
+import { ChartsHeading } from '@/components/charts/chartKind';
 
 /** ---------------------------------------------------------------------------
  * Capacity dashboard.
@@ -123,9 +121,6 @@ export function CapacityDashboard({ ds, rows, schema, focusMonth, snapshotRows }
 }) {
   const { period } = useAnalytics();
   const [drill, setDrill] = useState<{ title: string; rows: Row[] } | null>(null);
-  /* Each chart opens in its designed form; a viewer can re-plot it as bar,
-     line, area or pie from the dropdown in its header. */
-  const { kindOf, setKind } = useChartKinds('capacity');
   const { roles, hasUtilisation, primaryDimension } = schema;
 
   /** Which column names the thing being measured. `roles.name` is the admin's
@@ -238,6 +233,7 @@ export function CapacityDashboard({ ds, rows, schema, focusMonth, snapshotRows }
     return {
       key: k, label: monthName(k), rows: list,
       values: {
+        capacity: cap,
         occupied: occ,
         available: Math.max(0, cap - occ),
         util: cap ? (occ / cap) * 100 : 0,
@@ -268,39 +264,25 @@ export function CapacityDashboard({ ds, rows, schema, focusMonth, snapshotRows }
   const open = (u: UtilisationRow) => setDrill({ title: u.key, rows: u.rows });
   const h = 200;
 
-  /* One-series views of the data behind each chart, shared by the default
-     render and every alternative so the two can never disagree. */
-  type TrendKey = keyof typeof trend[number]['values'];
-  const series = (pts: typeof trend, k: TrendKey): SwitchDatum[] =>
-    pts.map(p => ({ key: p.key, label: p.label, value: p.values[k] ?? 0, rows: p.rows }));
-  const locUtil: SwitchDatum[] = [...byLoc].sort((a, b) => b.pct - a.pct)
-    .map(u => ({ key: u.key, label: u.key, value: Math.min(100, u.pct), rows: u.rows }));
-  const siteUtil: SwitchDatum[] = [...byName].sort((a, b) => b.pct - a.pct)
-    .map(u => ({ key: u.key, label: u.key, value: Math.min(100, u.pct), rows: u.rows }));
-  const siteFree: SwitchDatum[] = [...byName].sort((a, b) => b.available - a.available)
-    .map(u => ({ key: u.key, label: u.key, value: u.available, rows: u.rows }));
-  const pick = (d: SwitchDatum) => setDrill({ title: d.label, rows: d.rows });
-  const picker = (id: string) => <ChartKindSelect value={kindOf(id)} onChange={k => setKind(id, k)} />;
-  const cols6 = { gridTemplateColumns: 'repeat(6, minmax(0, 1fr))' };
-
   return (
     <div className="b2b-dash">
       <section className="section">
         <SectionHeader title="Capacity"
           note={`${formatInt(snapshot.length)} ${snapshot.length === 1 ? 'site' : 'sites'} · ${snapLabel}`} />
 
-        {/* Four questions this page exists to answer — how full are we, what
-            does a customer take, and are customers or space walking out — plus
-            the two space figures they are computed from. Counts that only feed
-            those ratios (total capacity, new/left, near-full site counts) are
-            not tiles: they are in the status strip and the site table below. */}
-        <div className="grid grid--kpi grid--kpi-std" style={cols6}>
-          <Tile label="Utilisation" value={formatPct(util, 1)} lead icon="chart" spark={sparkOf('util')}
-            sub={<>{chip(pctDelta(util, priorUtil), 'MoM')} <span className="mk__note">{BAND_LABEL[utilBand]}</span></>} />
+        {/* Space first, in the order it is read — how much there is, how much
+            is taken, how much is left, and the utilisation that follows from
+            those — then the customer and churn figures. Seven compact tiles
+            so the whole row fits on one line. */}
+        <div className="grid grid--kpi grid--kpi-std cap-kpis">
+          <Tile label={`Total ${unit}`} value={formatInt(capacity)} icon="overview" spark={sparkOf('capacity')}
+            sub={chip(pctDelta(capacity, priorCap), 'MoM')} />
           <Tile label={`Occupied ${unit}`} value={formatInt(occupied)} icon="layers" spark={sparkOf('occupied')}
             sub={chip(pctDelta(occupied, priorOcc), 'MoM')} />
           <Tile label={`Available ${unit}`} value={formatInt(available)} icon="box" spark={sparkOf('available')}
-            sub={<span className="mk__note">of {formatCompactNum(capacity)} {unit}</span>} />
+            sub={<span className="mk__note">{capacity > 0 ? `${formatPct((available / capacity) * 100, 1)} free` : '—'}</span>} />
+          <Tile label="Utilisation" value={formatPct(util, 1)} lead icon="chart" spark={sparkOf('util')}
+            sub={<>{chip(pctDelta(util, priorUtil), 'MoM')} <span className="mk__note">{BAND_LABEL[utilBand]}</span></>} />
           <Tile label={`Average ${unit} / customer`} value={customers ? formatInt(avgSpace) : '—'}
             icon="users" spark={sparkOf('avg')}
             sub={<span className="mk__note">{customers ? `${formatInt(customers)} customers` : 'No customers recorded'}</span>} />
@@ -344,89 +326,73 @@ export function CapacityDashboard({ ds, rows, schema, focusMonth, snapshotRows }
       )}
 
       <section className="section">
+        <ChartsHeading />
         <div className="grid" style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 16 }}>
           <ChartFrame title="Utilisation trend" question="How full is the network month to month?" height={h}
-            isEmpty={trend.length < 2} actions={picker('util-trend')}>
-            {hh => <SwitchableChart kind={kindOf('util-trend')} height={hh}
-              data={series(trend, 'util')} seriesLabel="Utilisation %" isRatio countNoun="months"
-              valueFormat={n => formatPct(n, 1)} colorIndex={0} onSelect={pick}
-              renderDefault={() => <TrendChart height={hh} data={trend} valueFormat={n => formatPct(n, 1)} legendStat="none"
-                series={[{ id: 'util', label: 'Utilisation %', kind: 'line', colorIndex: 0 }]}
-                onPointClick={p => setDrill({ title: p.label, rows: p.rows })} />} />}
+            isEmpty={trend.length < 2}>
+            {hh => <TrendChart height={hh} data={trend} valueFormat={n => formatPct(n, 1)} legendStat="none"
+              series={[{ id: 'util', label: 'Utilisation %', kind: 'line', colorIndex: 0 }]}
+              onPointClick={p => setDrill({ title: p.label, rows: p.rows })} />}
           </ChartFrame>
 
           {locDim && (
             <ChartFrame title={`Utilisation by ${locDim.header.toLowerCase()}`}
-              question="Which areas are tight and which are idle?" height={h} isEmpty={!byLoc.length}
-              actions={picker('util-loc')}>
-              {hh => <SwitchableChart kind={kindOf('util-loc')} height={hh}
-                data={locUtil} seriesLabel="Utilisation" isRatio countNoun="areas"
-                valueFormat={n => formatPct(n, 1)} colorIndex={0} onSelect={pick}
-                renderDefault={() => <CategoryChart height={hh} valueFormat={n => formatPct(n, 1)} colorIndex={0}
-                  valueLabel="Utilisation"
-                  data={locUtil.map(d => ({ key: d.key, value: d.value, count: d.rows.length, rows: d.rows }))}
-                  onBarClick={d => setDrill({ title: d.key, rows: d.rows })} />} />}
+              question="Which areas are tight and which are idle?" height={h} isEmpty={!byLoc.length}>
+              {hh => <CategoryChart height={hh} valueFormat={n => formatPct(n, 1)} colorIndex={0}
+                valueLabel="Utilisation"
+                data={[...byLoc].sort((a, b) => b.pct - a.pct).map(u => ({
+                  key: u.key, value: Math.min(100, u.pct), count: u.rows.length, rows: u.rows,
+                }))}
+                onBarClick={d => setDrill({ title: d.key, rows: d.rows })} />}
             </ChartFrame>
           )}
 
           <ChartFrame title="Space churn trend" question="How much space is being given back?" height={h}
-            isEmpty={trend.length < 2} actions={picker('space-churn')}>
-            {hh => <SwitchableChart kind={kindOf('space-churn')} height={hh}
-              data={series(trend.slice(1), 'spaceChurn')} seriesLabel="Space churn %" isRatio countNoun="months"
-              valueFormat={n => formatPct(n, 1)} colorIndex={3} onSelect={pick}
-              renderDefault={() => <TrendChart height={hh} data={trend.slice(1)} valueFormat={n => formatPct(n, 1)}
-                legendStat="none"
-                series={[{ id: 'spaceChurn', label: 'Space churn %', kind: 'bar', colorIndex: 3 }]}
-                onPointClick={p => setDrill({ title: p.label, rows: p.rows })} />} />}
+            isEmpty={trend.length < 2}>
+            {hh => <TrendChart height={hh} data={trend.slice(1)} valueFormat={n => formatPct(n, 1)}
+              legendStat="none"
+              series={[{ id: 'spaceChurn', label: 'Space churn %', kind: 'bar', colorIndex: 3 }]}
+              onPointClick={p => setDrill({ title: p.label, rows: p.rows })} />}
           </ChartFrame>
 
           {hasCustomers && (
             <ChartFrame title="Customer churn trend" question="Is churn getting worse?" height={h}
-              isEmpty={trend.length < 2} actions={picker('customer-churn')}>
-              {hh => <SwitchableChart kind={kindOf('customer-churn')} height={hh}
-                data={series(trend, 'churn')} seriesLabel="Churn %" isRatio countNoun="months"
-                valueFormat={n => formatPct(n, 1)} colorIndex={3} onSelect={pick}
-                renderDefault={() => <TrendChart height={hh} data={trend} valueFormat={n => formatPct(n, 1)} legendStat="none"
-                  series={[{ id: 'churn', label: 'Churn %', kind: 'line', colorIndex: 3 }]}
-                  onPointClick={p => setDrill({ title: p.label, rows: p.rows })} />} />}
+              isEmpty={trend.length < 2}>
+              {hh => <TrendChart height={hh} data={trend} valueFormat={n => formatPct(n, 1)} legendStat="none"
+                series={[{ id: 'churn', label: 'Churn %', kind: 'line', colorIndex: 3 }]}
+                onPointClick={p => setDrill({ title: p.label, rows: p.rows })} />}
             </ChartFrame>
           )}
 
           {hasCustomers && (
             <ChartFrame title={`Average ${unit} per customer`} question="Are customers taking more space or less?"
-              height={h} isEmpty={trend.length < 2} actions={picker('avg-space')}>
-              {hh => <SwitchableChart kind={kindOf('avg-space')} height={hh}
-                data={series(trend, 'avg')} seriesLabel={`${unit} / customer`} isRatio countNoun="months"
-                valueFormat={formatInt} colorIndex={4} onSelect={pick}
-                renderDefault={() => <TrendChart height={hh} data={trend} valueFormat={formatInt} legendStat="none"
-                  series={[{ id: 'avg', label: `${unit} / customer`, kind: 'line', colorIndex: 4 }]}
-                  onPointClick={p => setDrill({ title: p.label, rows: p.rows })} />} />}
+              height={h} isEmpty={trend.length < 2}>
+              {hh => <TrendChart height={hh} data={trend} valueFormat={formatInt} legendStat="none"
+                pieTotal={false}
+                series={[{ id: 'avg', label: `${unit} / customer`, kind: 'line', colorIndex: 4 }]}
+                onPointClick={p => setDrill({ title: p.label, rows: p.rows })} />}
             </ChartFrame>
           )}
 
           {nameDim && byName.length > 0 && (
-            <ChartFrame title="Sites closest to full" question="Which sites have no room left to sell?" height={h}
-              actions={picker('sites-full')}>
-              {hh => <SwitchableChart kind={kindOf('sites-full')} height={hh} maxBars={10}
-                data={siteUtil} seriesLabel="Utilisation" isRatio countNoun="sites"
-                valueFormat={n => formatPct(n, 1)} colorIndex={3} onSelect={pick}
-                renderDefault={() => <CategoryChart height={hh} maxBars={10} valueFormat={n => formatPct(n, 1)}
-                  valueLabel="Utilisation" colorIndex={3}
-                  data={siteUtil.map(d => ({ key: d.key, value: d.value, count: d.rows.length, rows: d.rows }))}
-                  onBarClick={d => setDrill({ title: d.key, rows: d.rows })} />} />}
+            <ChartFrame title="Sites closest to full" question="Which sites have no room left to sell?" height={h}>
+              {hh => <CategoryChart height={hh} maxBars={10} valueFormat={n => formatPct(n, 1)}
+                valueLabel="Utilisation" colorIndex={3}
+                data={[...byName].sort((a, b) => b.pct - a.pct).map(u => ({
+                  key: u.key, value: Math.min(100, u.pct), count: u.rows.length, rows: u.rows,
+                }))}
+                onBarClick={d => setDrill({ title: d.key, rows: d.rows })} />}
             </ChartFrame>
           )}
 
           {nameDim && byName.length > 0 && (
-            <ChartFrame title="Space still free by site" question="Where can the next customer be placed?" height={h}
-              actions={picker('space-free')}>
-              {hh => <SwitchableChart kind={kindOf('space-free')} height={hh} maxBars={10}
-                data={siteFree} seriesLabel={`Available ${unit}`}
-                valueFormat={formatCompactNum} colorIndex={1} onSelect={pick}
-                renderDefault={() => <CategoryChart height={hh} maxBars={10} valueFormat={formatCompactNum}
-                  valueLabel={`Available ${unit}`} colorIndex={1}
-                  data={siteFree.map(d => ({ key: d.key, value: d.value, count: d.rows.length, rows: d.rows }))}
-                  onBarClick={d => setDrill({ title: d.key, rows: d.rows })} />} />}
+            <ChartFrame title="Space still free by site" question="Where can the next customer be placed?" height={h}>
+              {hh => <CategoryChart height={hh} maxBars={10} valueFormat={formatCompactNum}
+                valueLabel={`Available ${unit}`} colorIndex={1}
+                data={[...byName].sort((a, b) => b.available - a.available).map(u => ({
+                  key: u.key, value: u.available, count: u.rows.length, rows: u.rows,
+                }))}
+                onBarClick={d => setDrill({ title: d.key, rows: d.rows })} />}
             </ChartFrame>
           )}
         </div>

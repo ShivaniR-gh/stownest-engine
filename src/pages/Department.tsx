@@ -43,6 +43,7 @@ import { FinanceDashboard } from '@/components/metrics/FinanceDashboard';
 import { MarketingRecordsView } from '@/components/data/MarketingRecordsView';
 import { SalesCityView } from '@/components/data/SalesCityView';
 import { B2BMonthlyView } from '@/components/data/B2BMonthlyView';
+import { ChartKindProvider, ChartKindSwitch } from '@/components/charts/chartKind';
 
 type View = 'dashboard' | 'records';
 
@@ -387,7 +388,9 @@ export default function Department() {
           <ErrorState title={`No ${activeLine} data yet`}
             body={`Nothing is connected for ${activeLine} in ${dept.label}. Add a dataset with businessLine: '${activeLine}' to fill this tab.`} />
         ) : view === 'dashboard' ? (
-          <>
+          /* One chart-type choice per department page. Every chart below
+             follows it; the switch sits in the charts section's heading. */
+          <ChartKindProvider scope={dept.id}>
             {/* Filters are hidden when a department's own dashboard is
                 driving the page — it owns its period/city controls. But a
                 capacity dataset is rendered by CapacityDashboard, not by the
@@ -428,14 +431,14 @@ export default function Department() {
                     second heading directly on top of the first with nothing
                     between them. Only the generic path needs it. */}
                 <section className="section">
-                  {!dept.customDashboard && <SectionHeader title="Analysis" />}
+                  {!dept.customDashboard && <SectionHeader title="Analysis" action={<ChartKindSwitch />} />}
                   <DepartmentCharts department={dept.id}
                     ctx={{ rows: scoped, period, activeDatasetId: activeDataset?.id ?? '',
                           drill: (t, d, r) => drill.openRows(t, d, r) }} />
                 </section>
               </>
             )}
-          </>
+          </ChartKindProvider>
         ) : (
           activeDataset && (
             <section className="section">

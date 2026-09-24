@@ -11,6 +11,7 @@ import { ChartFrame } from '@/components/charts/ChartFrame';
 import { TrendChart } from '@/components/charts/TrendChart';
 import { CategoryChart } from '@/components/charts/CategoryChart';
 import type { SeriesPoint } from '@/lib/analytics/aggregate';
+import { ChartKindSwitch } from '@/components/charts/chartKind';
 
 const CITIES = [
   { key: 'blr', name: 'Bangalore' },
@@ -619,7 +620,7 @@ function Charts({ id, windowed, cur }: { id: string; windowed: [string, Row][]; 
   if (id === 'ct_city_income') {
     return (
       <section className="section">
-        <SectionHeader title="Trends" />
+        <SectionHeader title="Trends" action={<ChartKindSwitch />} />
         <div style={grid}>
           <ChartFrame title="Income" question="Is rental and logistic income moving together?" height={h} isEmpty={trend.length < 1}>
             {hh => <TrendChart height={hh} data={trend} valueFormat={formatINRCompact}
@@ -671,7 +672,7 @@ function Charts({ id, windowed, cur }: { id: string; windowed: [string, Row][]; 
   if (id === 'ct_rental_trends') {
     return (
       <section className="section">
-        <SectionHeader title="Trends" />
+        <SectionHeader title="Trends" action={<ChartKindSwitch />} />
         <div style={grid}>
           <ChartFrame title="Pickup vs delivery rental" question="Which side is earning more?" height={h} isEmpty={trend.length < 1}>
             {hh => <TrendChart height={hh} data={trend} valueFormat={formatINRCompact}
@@ -695,7 +696,7 @@ function Charts({ id, windowed, cur }: { id: string; windowed: [string, Row][]; 
   if (id === 'ct_city_gap') {
     return (
       <section className="section">
-        <SectionHeader title="Trends" />
+        <SectionHeader title="Trends" action={<ChartKindSwitch />} />
         <div style={grid}>
           <ChartFrame title="National pickup vs delivery" question="Is the gap closing?" height={h} isEmpty={trend.length < 1}>
             {hh => <TrendChart height={hh} data={trend} valueFormat={formatInt}
@@ -718,7 +719,7 @@ function Charts({ id, windowed, cur }: { id: string; windowed: [string, Row][]; 
   if (id === 'ct_interstate') {
     return (
       <section className="section">
-        <SectionHeader title="Trends" />
+        <SectionHeader title="Trends" action={<ChartKindSwitch />} />
         <div style={grid}>
           <ChartFrame title="Completed vs in transit" question="How much work is still on the road?" height={h} isEmpty={trend.length < 1}>
             {hh => <TrendChart height={hh} data={trend} valueFormat={formatInt}
@@ -741,7 +742,7 @@ function Charts({ id, windowed, cur }: { id: string; windowed: [string, Row][]; 
   if (id === 'ct_reviews') {
     return (
       <section className="section">
-        <SectionHeader title="Trends" />
+        <SectionHeader title="Trends" action={<ChartKindSwitch />} />
         <div style={grid}>
           <ChartFrame title="Review coverage" question="How many deliveries get a review?" height={h} isEmpty={trend.length < 1}>
             {hh => <TrendChart height={hh} data={trend} valueFormat={formatInt} legendStat="none"
@@ -766,7 +767,7 @@ function Charts({ id, windowed, cur }: { id: string; windowed: [string, Row][]; 
   if (id === 'ct_tickets') {
     return (
       <section className="section">
-        <SectionHeader title="Trends" />
+        <SectionHeader title="Trends" action={<ChartKindSwitch />} />
         <div style={grid}>
           <ChartFrame title="Tickets" question="Are damage and missing tickets rising?" height={h} isEmpty={trend.length < 1}>
             {hh => <TrendChart height={hh} data={trend} valueFormat={formatInt}
@@ -792,7 +793,7 @@ function Charts({ id, windowed, cur }: { id: string; windowed: [string, Row][]; 
   if (id === 'ct_delivery_econ') {
     return (
       <section className="section">
-        <SectionHeader title="Trends" />
+        <SectionHeader title="Trends" action={<ChartKindSwitch />} />
         <div style={grid}>
           <ChartFrame title="Who delivers" question="StowNest vs customer deliveries?" height={h} isEmpty={trend.length < 1}>
             {hh => <TrendChart height={hh} data={trend} valueFormat={formatInt}
@@ -821,7 +822,7 @@ function Charts({ id, windowed, cur }: { id: string; windowed: [string, Row][]; 
     ] as const;
     return (
       <section className="section">
-        <SectionHeader title="Trends" />
+        <SectionHeader title="Trends" action={<ChartKindSwitch />} />
         <div style={grid}>
           <ChartFrame title="Calls vs Interakt" question="Where is volume landing?" height={h} isEmpty={trend.length < 1}>
             {hh => <TrendChart height={hh} data={trend} valueFormat={formatInt}

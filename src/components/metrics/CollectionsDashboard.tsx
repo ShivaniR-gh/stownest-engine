@@ -10,6 +10,7 @@ import { formatINRCompact, formatPct, parseDate, toNum } from '@/lib/format';
 import { keysInWindow, monthKey as ymk, defaultMonthPeriod } from '@/lib/analytics/monthWindow';
 import { PeriodSelect } from '@/components/filters/PeriodSelect';
 import { KpiTile } from '@/components/metrics/KpiTile';
+import { ChartKindSwitch } from '@/components/charts/chartKind';
 
 /** ---------------------------------------------------------------------------
  * Collections dashboard.
@@ -208,7 +209,7 @@ export function CollectionsDashboard({ monthly, drill }: {
 
 
       <section className="section">
-        <SectionHeader title="Analysis" />
+        <SectionHeader title="Analysis" action={<ChartKindSwitch />} />
         <div className="grid grid--split">
           <ChartFrame title="Raised vs collected by month" department="collections" height={260}
             question="Which months are we invoicing but not collecting? (full history, not the selected period)"

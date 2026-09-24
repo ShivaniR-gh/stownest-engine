@@ -83,13 +83,31 @@
 .heat__scale { display: flex; align-items: center; gap: 6px; margin-top: var(--s3); font-size: var(--fs-micro); color: var(--ink-400); }
 .heat__ramp { display: flex; gap: 1px; }
 .heat__ramp i { width: 16px; height: 8px; display: block; }
-/* Chart-type dropdown in a ChartFrame header. Quiet until someone moves it
-   off Default, then accent-coloured so a non-default view is obvious. */
-.chartkind {
-  font: inherit; font-size: 12px; color: var(--ink-600);
-  background: transparent; border: 1px solid var(--line); border-radius: 6px;
-  padding: 2px 6px; height: 26px; cursor: pointer; max-width: 128px;
+/* ---------------------------------------------------------------------------
+ * Page-wide chart-type switch (components/charts/chartKind.tsx).
+ * ------------------------------------------------------------------------- */
+.chartkind-bar { display: inline-flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.chartkind-bar__lb { font-size: 12px; font-weight: 600; color: var(--ink-600); white-space: nowrap; }
+.chartkind-seg {
+  display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 2px;
+  border: 1px solid var(--line); border-radius: 8px; background: var(--surface-sunk);
 }
-.chartkind:hover { border-color: var(--ink-300); color: var(--ink-900); }
-.chartkind:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.chartkind[data-on] { color: var(--accent); border-color: var(--accent); }
+.chartkind-seg__btn {
+  font: inherit; font-size: 12px; color: var(--ink-600); background: transparent;
+  border: 0; border-radius: 6px; padding: 4px 10px; cursor: pointer; white-space: nowrap;
+}
+.chartkind-seg__btn:hover { color: var(--ink-900); }
+.chartkind-seg__btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.chartkind-seg__btn[data-on] {
+  background: var(--surface); color: var(--accent); font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .08);
+}
+
+/* Heading row for a charts section: title left, switch right, one rule under
+   both — the same look as the "Utilisation status" heading. */
+.chartkind-hd {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  flex-wrap: wrap; margin-bottom: var(--s3); padding-bottom: var(--s2);
+  border-bottom: 1px solid var(--line);
+}
+.chartkind-hd .cef__sec { margin: 0; padding: 0; border: 0; }

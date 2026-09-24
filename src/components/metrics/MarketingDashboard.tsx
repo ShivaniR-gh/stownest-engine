@@ -14,6 +14,7 @@ import { keysInWindow, defaultMonthPeriod } from '@/lib/analytics/monthWindow';
 import { PeriodSelect } from '@/components/filters/PeriodSelect';
 import { SelectField } from '@/components/filters/SelectField';
 import { KpiTile } from '@/components/metrics/KpiTile';
+import { ChartKindSwitch } from '@/components/charts/chartKind';
 
 /** ---------------------------------------------------------------------------
  * Marketing dashboard.
@@ -348,7 +349,7 @@ function LeadView({ cat, now, before, periodNote, filters, drill, windowKeys, tr
       </section>
 
       <section className="section">
-        <SectionHeader title="Analysis" />
+        <SectionHeader title="Analysis" action={<ChartKindSwitch />} />
 
         <div className="grid grid--split">
           <ChartFrame title="Lead volume and quality" department="marketing" height={h}
@@ -561,7 +562,7 @@ function CostView({ cat, now, before, periodNote, filters, drill, windowKeys, tr
       </section>
 
       <section className="section">
-        <SectionHeader title="Analysis" />
+        <SectionHeader title="Analysis" action={<ChartKindSwitch />} />
         <div className="grid grid--split">
           <ChartFrame title="Spend against customers" department="marketing" height={h}
             question="Is more budget buying more customers?"

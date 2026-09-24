@@ -15,6 +15,16 @@ export function niceTicks(min: number, max: number, count = 5): number[] {
   return out;
 }
 
+/** Axis label for one tick. Whole-number ticks keep the compact format
+ *  (1.2K, 5L); fractional ticks keep as many decimals as the step needs, so
+ *  a 0–1.2% axis reads 0, 0.2, 0.4 … instead of 0, 0, 0, 1, 1. */
+export function formatTick(t: number, ticks: number[], compact: (n: number) => string): string {
+  const step = ticks.length > 1 ? Math.abs(ticks[1] - ticks[0]) : 1;
+  if (step >= 1 && Number.isInteger(t)) return compact(t);
+  const dp = Math.min(4, Math.max(0, Math.ceil(-Math.log10(step)) + (step * 10 ** Math.ceil(-Math.log10(step)) % 1 ? 1 : 0)));
+  return t.toFixed(dp);
+}
+
 export const scaleY = (v: number, min: number, max: number, h: number) =>
   max === min ? h / 2 : h - ((v - min) / (max - min)) * h;
 

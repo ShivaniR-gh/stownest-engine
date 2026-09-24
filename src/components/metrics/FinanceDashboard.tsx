@@ -12,6 +12,7 @@ import { ChartFrame } from '@/components/charts/ChartFrame';
 import { TrendChart } from '@/components/charts/TrendChart';
 import { CategoryChart } from '@/components/charts/CategoryChart';
 import type { SeriesPoint } from '@/lib/analytics/aggregate';
+import { ChartsHeading } from '@/components/charts/chartKind';
 
 const n = (r: Row | undefined, k: string) => (r ? toNum(r[k]) ?? 0 : 0);
 
@@ -211,6 +212,7 @@ export function FinanceDashboard({ rows, mode = 'dashboard', onEdit }: {
 
       {!records && (
         <section className="section">
+          <ChartsHeading />
           <div className="grid" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 16 }}>
             <ChartFrame title="Revenue by month" question="How is booked revenue moving?" height={h}
               isEmpty={!trend.some(p => p.values.revenue)}>
